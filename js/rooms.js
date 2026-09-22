@@ -122,12 +122,45 @@ class RoomManager {
     // Floor 1 is always Breakout for clean run onboarding
     if (floor === 1) return 'BREAKOUT';
 
-    // Procedural run variation driven by runSeed
     const seed = (typeof window !== 'undefined' && window.currentRunSeed) ? window.currentRunSeed : 1337;
     const roomPool = ['BREAKOUT', 'DUEL', 'SWARM', 'HEIST'];
-    // Deterministic hash of floor and run seed
-    const hash = ((floor * 37 + seed * 19) ^ (floor * 11)) >>> 0;
-    return roomPool[hash % roomPool.length];
+
+    // Count deterministic combat encounter index up to this floor (1-based)
+    let cIndex = 0;
+    for (let f = 2; f <= floor; f++) {
+      if (f % 10 !== 0 && f % 5 !== 0 && f % 5 !== 4 && f % 10 !== 3) {
+        cIndex++;
+      }
+    }
+
+    const cycle = Math.floor((cIndex - 1) / 4);
+    const slot = (cIndex - 1) % 4;
+
+    const getCyclePerm = (c, s) => {
+      const cSeed = (Math.imul(s, 1664525) + Math.imul(c, 1013904223) + 2246822507) >>> 0;
+      const p = [0, 1, 2, 3];
+      for (let i = 3; i > 0; i--) {
+        const r = (Math.imul(cSeed ^ Math.imul(i, 2654435761), 2246822507)) >>> 0;
+        const j = r % (i + 1);
+        const tmp = p[i]; p[i] = p[j]; p[j] = tmp;
+      }
+      if (c === 0) {
+        // Floor 1 is always BREAKOUT (index 0). Ensure combat encounter 1 (floor 2) is not BREAKOUT.
+        if (p[0] === 0) {
+          const tmp = p[0]; p[0] = p[1]; p[1] = tmp;
+        }
+      } else {
+        const prevPerm = getCyclePerm(c - 1, s);
+        const prevLast = prevPerm[3];
+        if (p[0] === prevLast) {
+          const tmp = p[0]; p[0] = p[1]; p[1] = tmp;
+        }
+      }
+      return p;
+    };
+
+    const perm = getCyclePerm(cycle, seed);
+    return roomPool[perm[slot]];
   }
 
   // ==========================================================================

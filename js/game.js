@@ -793,7 +793,9 @@ function saveMidRunSession() {
       usedUniqueBallsThisRun: Array.from(usedUniqueBallsThisRun),
       railgunCharge: railgunCharge,
       runPurchases: runPurchases,
-      runDataChips: runDataChips
+      runDataChips: runDataChips,
+      activeGameMode: activeGameMode,
+      currentRunSeed: window.currentRunSeed
     };
     localStorage.setItem(STORAGE_MIDRUN_KEY, JSON.stringify(midRunSave));
   } catch (e) {}
@@ -1921,9 +1923,32 @@ function generateRoom(floor) {
     window.roomManager.cleanupAllRoomState();
   }
   ai.active = false;
+  ai.hp = 0;
+  ai.maxHp = 0;
+  ai.personality = null;
+  ai.personalityKey = null;
+  ai.isBoss = false;
+  ai.isMiniBoss = false;
+  ai.rageActive = false;
+  ai.stunTimer = 0;
+  ai.frozenTimer = 0;
+  ai.burnTimer = 0;
+  window.currentDuelPersonality = null;
   powerOrb = null;
+  duelMomentum = 1;
+  window.duelMomentum = 1;
+  duelTimer = 0;
+  window.duelTimer = 0;
+  duelRallyCount = 0;
+  isHyperSpike = false;
+  bennieBoss = null;
+  bossChallengeState = 'none';
+  syncBennieBossHudVisibility();
   enemyBullets.length = 0;
   lasers.length = 0;
+  balls.length = 0;
+  phantomBalls.length = 0;
+  shockwaves.length = 0;
 
   // Initialize selected room
   if (roomType === 'BREAKOUT') {
@@ -7132,6 +7157,13 @@ function resumeExistingRun() {
   }
 
   currentFloor = midRunSave.floor || 1;
+  if (midRunSave.activeGameMode) {
+    activeGameMode = midRunSave.activeGameMode;
+    window.activeGameMode = activeGameMode;
+  }
+  if (midRunSave.currentRunSeed) {
+    window.currentRunSeed = midRunSave.currentRunSeed;
+  }
   runScore = midRunSave.score || 0;
   runCoresEarned = midRunSave.runCoresEarned || 0;
   railgunCharge = midRunSave.railgunCharge || 0;
