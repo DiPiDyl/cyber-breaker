@@ -89,6 +89,9 @@ class RoomManager {
     this.casinoActive = false;
     this.casinoIsSpinning = false;
     this.casinoOutcome = null;
+    if (typeof window !== 'undefined') {
+      window.isCasinoWheelAnimating = false;
+    }
 
     if (window.audio && typeof window.audio.stopAllLoops === 'function') {
       window.audio.stopAllLoops();
@@ -1168,6 +1171,9 @@ class RoomManager {
     this.casinoIsSpinning = false;
     this.casinoOutcome = null;
     this.casinoSelectedWager = 'safe';
+    if (typeof window !== 'undefined') {
+      window.isCasinoWheelAnimating = false;
+    }
   }
 
   getCasinoOddsTable(wagerTier) {

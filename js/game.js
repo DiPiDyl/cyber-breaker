@@ -79,6 +79,130 @@ window.recordRunPurchase = recordRunPurchase;
 
 const collectedArtifacts = new Set();
 window.collectedArtifacts = collectedArtifacts;
+
+function hasArtifact(id) {
+  if (!id || typeof collectedArtifacts === 'undefined') return false;
+  if (collectedArtifacts.has(id)) return true;
+
+  const ALIASES = {
+    'cryo_frostbite': ['frostbite_core', 'cryo_lance', 'cryo_fracture', 'subzero_cryo_cells'],
+    'frostbite_core': ['cryo_frostbite'],
+    'fireball_core': ['inferno_ball', 'pyro_inferno_fuel', 'combustion_rounds'],
+    'inferno_ball': ['fireball_core'],
+    'graviton_core': ['graviton_anchor', 'graviton_accelerator', 'gravity_well', 'gravitational_cataclysm'],
+    'gravity_well_inverter': ['gravity_battery', 'gravity_event_horizon', 'gravity_tidal_disruptor'],
+    'flux_capacitor': ['flux_stabilizer', 'flux_steering_module', 'flux_inversion_pulse'],
+    'guardian_drone': ['guardian_interceptor', 'drone_nano_sentry', 'nano_sentry'],
+    'overclock_drone': ['drone_overclock', 'drone_overclock_relay'],
+    'drone_overclock': ['overclock_drone'],
+    'turbo_servo': ['hyperclock_servo', 'tachyon_accelerator', 'hyperspeed_coil'],
+    'hyper_servo': ['hyperclock_servo', 'turbo_servo'],
+    'speed_demon': ['hyperspeed_coil', 'pinball_accelerator', 'accelerator_shard'],
+    'kinetic_momentum': ['momentum_reactor', 'phase_momentum', 'kinetic_battery'],
+    'kinetic_concussion': ['rail_impact', 'titan_impact_perk', 'concussion_core'],
+    'iron_hull': ['reinforced_hull', 'titan_plating'],
+    'titan_plating': ['titan_impact_perk', 'reinforced_hull', 'adaptive_plating'],
+    'titanium_paddle': ['reinforced_hull', 'nanite_barrier', 'aegis_converter'],
+    'nanite_barrier': ['nanite_aegis_matrix', 'adaptive_plating', 'aegis_converter'],
+    'spike_plating': ['voltage_spike', 'ice_spikes', 'reactive_spikes'],
+    'nanite_leech': ['leech_pulse', 'siphon_nodes', 'vampiric_blood_tether'],
+    'vampiric_touch': ['vampiric_blood_tether', 'vampiric_siphon_veil', 'vampiric_frenzy', 'siphon_nodes'],
+    'precision_calibrator': ['apex_calibrator', 'siege_calibrator', 'precision_lens'],
+    'prism_lens': ['precision_lens', 'supercluster_prism', 'prismatic_facets'],
+    'rail_accelerator': ['superconductor_rails', 'rail_impact', 'tachyon_accelerator'],
+    'resonator_coil': ['hyper_resonator', 'harmonic_resonator'],
+    'toxic_catalyst': ['toxic_artillery', 'toxic_canisters', 'bio_residue', 'corrosive_coating'],
+    'executioner_protocol': ['executioner_rounds', 'apex_calibrator', 'precision_impact'],
+    'spring_loaded_bumper': ['inventor_spring_bumper'],
+    'inventor_spring_bumper': ['spring_loaded_bumper']
+  };
+
+  const aliases = ALIASES[id];
+  if (aliases) {
+    for (let i = 0; i < aliases.length; i++) {
+      if (collectedArtifacts.has(aliases[i])) return true;
+    }
+  }
+
+  for (const item of collectedArtifacts) {
+    if (item === id) return true;
+    if (item.endsWith('_' + id) || item.startsWith(id + '_')) return true;
+    if (id.endsWith('_' + item) || id.startsWith(item + '_')) return true;
+  }
+
+  return false;
+}
+window.hasArtifact = hasArtifact;
+
+function recalculatePlayerStats() {
+  if (typeof player === 'undefined') return;
+  const activeChar = (typeof CHARACTERS !== 'undefined' && typeof metaSave !== 'undefined' && metaSave.selectedChar) ? (CHARACTERS[metaSave.selectedChar] || CHARACTERS.vanguard) : { hpBonus: 0, speedMult: 1, smashBonus: 1, paddleSizeMult: 1 };
+  const baseMetaHp = 4 + (typeof metaSave !== 'undefined' && metaSave.upgrades ? (metaSave.upgrades.meta_hull || 0) : 0) + (activeChar.hpBonus || 0);
+  let archetypeHpBonus = 0;
+  if (primaryPath === 'juggernaut' || (typeof BUILD_PATHS !== 'undefined' && BUILD_PATHS[primaryPath]?.tag === 'Colossus Core')) archetypeHpBonus += 2;
+  if (hasArtifact('reinforced_hull')) archetypeHpBonus += 1;
+  if (hasArtifact('iron_bastion')) archetypeHpBonus += 1;
+  if (hasArtifact('titan_plating')) archetypeHpBonus += 1;
+  if (typeof isMarketModActive === 'function' && isMarketModActive('mod_titan_chassis')) {
+    archetypeHpBonus += 2;
+    if (typeof activeBuffs !== 'undefined') activeBuffs.shieldCharges = Math.max(activeBuffs.shieldCharges || 0, 1);
+  }
+  if (typeof isMarketModActive === 'function' && isMarketModActive('mod_glass_cannon')) archetypeHpBonus -= 1;
+
+  const oldMaxHp = player.maxHp || 4;
+  player.maxHp = Math.max(2, baseMetaHp + archetypeHpBonus);
+  if (player.hp === undefined || player.hp <= 0) {
+    player.hp = player.maxHp;
+  } else if (player.maxHp > oldMaxHp) {
+    player.hp = Math.min(player.maxHp, player.hp + (player.maxHp - oldMaxHp));
+  } else {
+    player.hp = Math.min(player.hp, player.maxHp);
+  }
+
+  let archetypeSpeedMult = 1.0;
+  if (primaryPath === 'fast' || primaryPath === 'velocity') archetypeSpeedMult = 1.25;
+  else if (primaryPath === 'juggernaut') archetypeSpeedMult = 0.85;
+
+  let perkSpeedBonus = 1.0;
+  if (hasArtifact('speed_demon')) perkSpeedBonus += 0.20;
+  if (hasArtifact('turbo_servo')) perkSpeedBonus += 0.15;
+  if (hasArtifact('hyper_servo')) perkSpeedBonus += 0.25;
+  if (hasArtifact('iron_hull')) perkSpeedBonus -= 0.10;
+  if (typeof isMarketModActive === 'function' && isMarketModActive('mod_overclocked_servos')) perkSpeedBonus *= 1.30;
+  if (typeof isMarketModActive === 'function' && isMarketModActive('mod_titan_chassis')) perkSpeedBonus *= 0.85;
+
+  const charSpeedMult = (activeChar && activeChar.speedMult) || (activeChar && activeChar.stats ? activeChar.stats.speed / 75 : 1.0) || 1.0;
+  const charSmash = (activeChar && activeChar.smashBonus) || (activeChar && activeChar.stats ? activeChar.stats.power / 70 : 1.0) || 1.0;
+  const charSizeMult = (activeChar && activeChar.paddleSizeMult) || (activeChar && activeChar.stats ? activeChar.stats.size / 75 : 1.0) || 1.0;
+
+  const metaSpeed = 1 + (typeof metaSave !== 'undefined' && metaSave.upgrades ? (metaSave.upgrades.meta_servos || 0) : 0) * 0.08;
+  player.speedMult = metaSpeed * charSpeedMult * archetypeSpeedMult * perkSpeedBonus;
+  player.smashBonus = charSmash * (primaryPath === 'fast' ? 1.2 : 1.0);
+  player.burnChance = (activeChar && activeChar.burnChance) || 0;
+  player.isVoid = !!(activeChar && activeChar.isVoid);
+  player.isChrono = !!(activeChar && activeChar.isChrono);
+  player.droneCommander = !!(activeChar && activeChar.droneCommander);
+  player.glitchArchitect = !!(activeChar && activeChar.glitchArchitect);
+
+  let baseH = CONFIG.basePaddleH * charSizeMult;
+  if (primaryPath === 'juggernaut') baseH *= 1.30;
+  if (hasArtifact('titanium_paddle')) baseH *= 1.25;
+  if (hasArtifact('iron_hull')) baseH *= 1.15;
+  if (hasArtifact('iron_bastion')) baseH *= 1.15;
+  if (hasArtifact('aegis_bulwark')) baseH *= 1.20;
+  if (hasArtifact('bismuth_alloy')) baseH *= 1.10;
+  if (hasArtifact('hyper_servo')) baseH *= 0.95;
+  if (typeof isMarketModActive === 'function' && isMarketModActive('mod_overclocked_servos')) baseH *= 0.85;
+  player.h = (!isNaN(baseH) && baseH > 0) ? baseH : CONFIG.basePaddleH;
+  player.w = CONFIG.basePaddleW || 16;
+  if (player.y === undefined || isNaN(player.y)) {
+    player.y = CONFIG.height / 2 - player.h / 2;
+  }
+  player.color = primaryPath && typeof BUILD_PATHS !== 'undefined' && BUILD_PATHS[primaryPath] ? BUILD_PATHS[primaryPath].color : (activeChar.color || '#00f2fe');
+  player.modifier = (activeChar && activeChar.modifier) || 'magnetic_edge';
+}
+window.recalculatePlayerStats = recalculatePlayerStats;
+
 let activeBallTransformation = 'normal';
 let usedUniqueBallsThisRun = new Set();
 
@@ -92,7 +216,25 @@ const activeBuffs = {
   lightning: 0,
   twinBlasters: 0,
   megaBall: 0,
-  shieldCharges: 0
+  shieldCharges: 0,
+  iceBall: 0,
+  shockBall: 0,
+  plasmaBall: 0,
+  voidBall: 0,
+  piercing: 0,
+  drill: 0,
+  magnet: 0,
+  orbitalDrone: 0,
+  ricochet: 0,
+  nanoArmor: 0,
+  kineticReflect: 0,
+  gravityWell: 0,
+  cryoField: 0,
+  overclock: 0,
+  thrusters: 0,
+  comboLock: 0,
+  overcharge: 0,
+  emergencyMatrix: 0
 };
 window.activeBuffs = activeBuffs;
 window.isAdminAuthenticated = false;
@@ -376,6 +518,10 @@ function getLeaderboards() {
   };
 }
 
+const GLOBAL_LEADERBOARD_API_ENDPOINT = (typeof window !== 'undefined' && window.CYBER_BREAKER_LEADERBOARD_URL) ? window.CYBER_BREAKER_LEADERBOARD_URL : 'https://cyber-breaker-leaderboard.dipidyl.workers.dev/api/leaderboard';
+let leaderboardScope = 'GLOBAL';
+const globalLeaderboardCache = {};
+
 function saveLeaderboardEntry(modeKey, entry) {
   if (!modeKey || !entry) return;
   const boards = getLeaderboards();
@@ -400,6 +546,28 @@ function saveLeaderboardEntry(modeKey, entry) {
   try {
     localStorage.setItem(STORAGE_LEADERBOARD_KEY, JSON.stringify(boards));
   } catch (e) {}
+
+  // Asynchronously submit score to Global Serverless Worker
+  if (typeof fetch === 'function') {
+    try {
+      const payload = {
+        mode: modeKey,
+        pilot: callsign,
+        char: charName,
+        score: Math.max(0, Math.round(entry.score || 0)),
+        floor: Math.max(1, entry.floor || 1)
+      };
+      fetch(GLOBAL_LEADERBOARD_API_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(res => {
+        if (res.ok) {
+          delete globalLeaderboardCache[modeKey];
+        }
+      }).catch(() => {});
+    } catch (e) {}
+  }
 }
 
 let activeLeaderboardTab = 'MAIN';
@@ -410,13 +578,89 @@ function renderLeaderboardTab(modeKey) {
     btn.classList.toggle('active', btn.dataset.tab === modeKey);
   });
 
+  const scopeGlobalBtn = document.getElementById('btnScopeGlobal');
+  const scopeLocalBtn = document.getElementById('btnScopeLocal');
+  const statusEl = document.getElementById('leaderboardNetworkStatus');
+
+  if (scopeGlobalBtn) {
+    scopeGlobalBtn.style.borderColor = leaderboardScope === 'GLOBAL' ? '#ffd700' : '#64748b';
+    scopeGlobalBtn.style.color = leaderboardScope === 'GLOBAL' ? '#ffd700' : '#94a3b8';
+  }
+  if (scopeLocalBtn) {
+    scopeLocalBtn.style.borderColor = leaderboardScope === 'LOCAL' ? '#ffd700' : '#64748b';
+    scopeLocalBtn.style.color = leaderboardScope === 'LOCAL' ? '#ffd700' : '#94a3b8';
+  }
+
   const container = document.getElementById('leaderboardRowsContainer');
   if (!container) return;
 
-  const boards = getLeaderboards();
-  const entries = boards[modeKey] || [];
+  if (leaderboardScope === 'LOCAL') {
+    if (statusEl) {
+      statusEl.textContent = '● LOCAL PILOT STORAGE';
+      statusEl.style.color = '#94a3b8';
+    }
+    const boards = getLeaderboards();
+    renderLeaderboardRows(container, boards[modeKey] || [], modeKey);
+    return;
+  }
 
-  if (entries.length === 0) {
+  // GLOBAL scope: check cache first
+  if (globalLeaderboardCache[modeKey]) {
+    if (statusEl) {
+      statusEl.textContent = '● LIVE CLOUD SYNC';
+      statusEl.style.color = '#00e676';
+    }
+    renderLeaderboardRows(container, globalLeaderboardCache[modeKey], modeKey);
+    return;
+  }
+
+  // Fetch from Global API with 4.5s timeout
+  if (statusEl) {
+    statusEl.textContent = '● CONNECTING TO NETWORK...';
+    statusEl.style.color = '#ffd700';
+  }
+  container.innerHTML = '<div style="padding: 24px; text-align: center; color: #ffd700;">📡 Querying Global Combat Grid...</div>';
+
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = setTimeout(() => { if (controller) controller.abort(); }, 4500);
+
+  fetch(`${GLOBAL_LEADERBOARD_API_ENDPOINT}?mode=${encodeURIComponent(modeKey)}`, {
+    signal: controller ? controller.signal : undefined
+  })
+  .then(res => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  })
+  .then(data => {
+    clearTimeout(timer);
+    if (data && Array.isArray(data.entries)) {
+      globalLeaderboardCache[modeKey] = data.entries;
+      if (activeLeaderboardTab === modeKey && leaderboardScope === 'GLOBAL') {
+        if (statusEl) {
+          statusEl.textContent = '● LIVE CLOUD SYNC';
+          statusEl.style.color = '#00e676';
+        }
+        renderLeaderboardRows(container, data.entries, modeKey);
+      }
+    } else {
+      throw new Error('Malformed response');
+    }
+  })
+  .catch(() => {
+    clearTimeout(timer);
+    if (activeLeaderboardTab === modeKey && leaderboardScope === 'GLOBAL') {
+      if (statusEl) {
+        statusEl.textContent = '● OFFLINE FALLBACK (LOCAL)';
+        statusEl.style.color = '#f59e0b';
+      }
+      const boards = getLeaderboards();
+      renderLeaderboardRows(container, boards[modeKey] || [], modeKey);
+    }
+  });
+}
+
+function renderLeaderboardRows(container, entries, modeKey) {
+  if (!entries || entries.length === 0) {
     container.innerHTML = '<div style="padding: 24px; text-align: center; color: #64748b;">No combat records recorded yet for this mode.</div>';
     return;
   }
@@ -426,7 +670,8 @@ function renderLeaderboardTab(modeKey) {
     const rankDisplay = idx < 3 ? medals[idx] : `#${idx + 1}`;
     const rankClass = idx < 3 ? `lb-rank-${idx + 1}` : '';
     const metricLabel = modeKey === 'DUEL_ENDLESS' ? `Duel ${e.floor}` : (modeKey === 'SWARM_ENDLESS' ? `Wave ${e.floor}` : (modeKey === 'HEIST_ENDLESS' ? `Sec-${e.floor}` : `Lvl ${e.floor}`));
-    const isYou = e.pilot && e.pilot.includes('(YOU)');
+    const callsign = (typeof getPlayerCallsign === 'function') ? getPlayerCallsign() : 'CYBER_PILOT';
+    const isYou = (e.pilot && (e.pilot.includes('(YOU)') || e.pilot === callsign));
     const pilotColor = isYou ? '#00f2fe' : '#f8fafc';
     const pilotStyle = isYou ? 'text-shadow: 0 0 8px rgba(0, 242, 254, 0.4);' : '';
 
@@ -434,8 +679,8 @@ function renderLeaderboardTab(modeKey) {
       <div class="lb-row" style="${isYou ? 'background: rgba(0, 242, 254, 0.08); border-left: 3px solid #00f2fe;' : ''}">
         <div class="lb-rank ${rankClass}">${rankDisplay}</div>
         <div>
-          <strong style="color: ${pilotColor}; ${pilotStyle}">${e.pilot}</strong>
-          <span style="font-size: 0.72rem; color: #64748b; margin-left: 6px;">(${e.char})</span>
+          <strong style="color: ${pilotColor}; ${pilotStyle}">${e.pilot || 'PILOT'}</strong>
+          <span style="font-size: 0.72rem; color: #64748b; margin-left: 6px;">(${e.char || 'Vanguard'})</span>
         </div>
         <div style="color: #00b0ff; font-weight: 700;">${metricLabel}</div>
         <div style="color: #ffd700; font-weight: 800;">${Number(e.score).toLocaleString('en-US')}</div>
@@ -943,8 +1188,8 @@ function attemptTriggerAbilitySlot(slotIdx = 0) {
     return;
   }
 
-  const hasBattery = collectedArtifacts.has('kinetic_battery');
-  const isHyperRail = hasBattery && collectedArtifacts.has('prism_lens');
+  const hasBattery = hasArtifact('kinetic_battery');
+  const isHyperRail = hasBattery && hasArtifact('prism_lens');
 
   if (hasBattery && railgunCharge >= 100 && slotIdx === 0) {
     fireMegaRailgun(isHyperRail);
@@ -959,7 +1204,7 @@ function attemptTriggerAbilitySlot(slotIdx = 0) {
     addFloatingText('VOID PHASE ACTIVE!', player.x + 35, player.y, '#d500f9');
     const activeChar = CHARACTERS[metaSave.selectedChar] || CHARACTERS.vanguard;
     const cdMult = (activeChar && activeChar.abilityCdMult) || 1.0;
-    const fluxMult = collectedArtifacts.has('flux_capacitor') ? 0.75 : 1.0;
+    const fluxMult = hasArtifact('flux_capacitor') ? 0.75 : 1.0;
     abilityCooldownMax = Math.round(280 * cdMult * (isMarketModActive('mod_overcharge') ? 0.75 : 1.0) * fluxMult);
     abilityCooldownCurrent = abilityCooldownMax;
     return;
@@ -981,7 +1226,7 @@ function attemptTriggerAbilitySlot(slotIdx = 0) {
   const cdMult = (activeChar && activeChar.abilityCdMult) || 1.0;
   const defAbility = ACTIVE_ABILITIES[abilityKey] || ACTIVE_ABILITIES.shockwave;
   const baseCd = defAbility.cooldownTicks || 300;
-  const fluxMult = collectedArtifacts.has('flux_capacitor') ? 0.75 : 1.0;
+  const fluxMult = hasArtifact('flux_capacitor') ? 0.75 : 1.0;
   const cdCalculated = Math.round(baseCd * cdMult * (isMarketModActive('mod_overcharge') ? 0.75 : 1.0) * fluxMult);
 
   window.abilityCooldowns[abilityKey] = cdCalculated;
@@ -1279,7 +1524,7 @@ function triggerOrbitalLaser() {
 
 function triggerDroneMissileSalvo() {
   if (window.audio) window.audio.turretShoot();
-  const droneCount = (collectedArtifacts.has('nano_sentry') ? 1 : 0) + (collectedArtifacts.has('defense_satellite') ? 1 : 0) + 2;
+  const droneCount = (hasArtifact('nano_sentry') ? 1 : 0) + (hasArtifact('defense_satellite') ? 1 : 0) + 2;
   for (let i = 0; i < droneCount * 2; i++) {
     const ang = (Math.random() - 0.5) * 0.6;
     lasers.push({
@@ -1414,8 +1659,8 @@ function triggerKineticShockwave() {
       }
       let dmg = 2.0;
       if (primaryPath === 'kinetic') dmg *= 1.5;
-      if (collectedArtifacts.has('resonator_coil')) dmg *= 1.5;
-      if (collectedArtifacts.has('kinetic_battery')) dmg *= 1.25;
+      if (hasArtifact('resonator_coil')) dmg *= 1.5;
+      if (hasArtifact('kinetic_battery')) dmg *= 1.25;
       if (isMarketModActive('mod_glass_cannon')) dmg *= 1.4;
 
       damageBennie(dmg, 'ability_kinetic_shock', { ability: 'shockwave' });
@@ -1491,7 +1736,7 @@ function getFloorMaxSpeed() {
   const baseCap = (roomType === 'BREAKOUT' || roomType === 'SWARM' || roomType === 'MELTDOWN')
     ? (currentFloor <= 5 ? 10.5 : (currentFloor <= 15 ? 12.0 : 13.8))
     : (currentFloor <= 5 ? 13.5 : 17.5);
-  return collectedArtifacts.has('rail_accelerator') ? baseCap * 1.25 : baseCap;
+  return hasArtifact('rail_accelerator') ? baseCap * 1.25 : baseCap;
 }
 
 // Damage pipeline with rebalanced poison & acid resistance
@@ -1541,7 +1786,7 @@ function processDamageQueue() {
 
       let dmg = pendingDamageMap.get(br.id);
       if (isMarketModActive('mod_glass_cannon')) dmg *= 1.4;
-      if (collectedArtifacts.has('executioner_protocol') && (br.hp / (br.maxHp || 1)) <= 0.25) {
+      if (hasArtifact('executioner_protocol') && (br.hp / (br.maxHp || 1)) <= 0.25) {
         dmg *= 3;
       }
 
@@ -1554,7 +1799,7 @@ function processDamageQueue() {
           explodedTntIds.add(br.id);
           explosionQueue.push({ cx: br.x + br.w / 2, cy: br.y + br.h / 2 });
         }
-        if (br.infected && collectedArtifacts.has('contagion_core')) {
+        if (br.infected && hasArtifact('contagion_core')) {
           contagionQueue.push({
             cx: br.x + br.w / 2,
             cy: br.y + br.h / 2,
@@ -1562,12 +1807,12 @@ function processDamageQueue() {
           });
         }
         // Bio Spore Mine
-        if (collectedArtifacts.has('bio_spore_mine') && br.infected) {
+        if (hasArtifact('bio_spore_mine') && br.infected) {
           spawnParticles(br.x + br.w / 2, br.y + br.h / 2, '#00e676', 8);
           addFloatingText('🍄 SPORE DETONATION!', br.x, br.y, '#00e676');
         }
         // Pyro Magma Eruption
-        if (collectedArtifacts.has('pyro_magma_eruption') && br.burning) {
+        if (hasArtifact('pyro_magma_eruption') && br.burning) {
           for (let f = 0; f < 3; f++) {
             lasers.push({
               x: br.x + br.w / 2,
@@ -1584,7 +1829,7 @@ function processDamageQueue() {
           addFloatingText('🌋 MAGMA ERUPTION!', br.x, br.y, '#ff5500');
         }
         // Nanite Swarm Infector
-        if (collectedArtifacts.has('nanite_swarm_infector')) {
+        if (hasArtifact('nanite_swarm_infector')) {
           const adj = bricks.find(b => b.id !== br.id && b.hp > 0 && Math.hypot(b.x - br.x, b.y - br.y) < 65);
           if (adj) {
             adj.hp = Math.max(0, adj.hp - 2);
@@ -1592,12 +1837,12 @@ function processDamageQueue() {
           }
         }
         // Resonance Acoustic Shatter
-        if (collectedArtifacts.has('resonance_acoustic_shatter') && Math.random() < 0.25) {
+        if (hasArtifact('resonance_acoustic_shatter') && Math.random() < 0.25) {
           bricks.filter(b => b.id !== br.id && Math.abs(b.y - br.y) < 15).forEach(b => { b.hp = Math.max(0, b.hp - 1); });
           addFloatingText('🔊 ROW SHATTER!', br.x, br.y, '#ec4899');
         }
         // Artillery Flak Barrage
-        if (collectedArtifacts.has('artillery_flak_barrage')) {
+        if (hasArtifact('artillery_flak_barrage')) {
           enemyBullets = enemyBullets.filter(eb => Math.hypot(eb.x - br.x, eb.y - br.y) > 100);
         }
       }
@@ -1631,7 +1876,7 @@ function processDamageQueue() {
   }
 
   // Strictly controlled Pandemic Outbreak
-  const isPandemic = collectedArtifacts.has('bio_residue') && collectedArtifacts.has('contagion_core');
+  const isPandemic = hasArtifact('bio_residue') && hasArtifact('contagion_core');
 
   while (contagionQueue.length > 0) {
     const ctg = contagionQueue.shift();
@@ -1846,71 +2091,18 @@ function generateRoom(floor) {
     document.getElementById('hudFloorBadge').textContent = `${modeName.toUpperCase()} • LEVEL ${floor} (${roomType})`;
   }
 
-  // Apply base HP + meta hull upgrades + archetype bonuses
-  const baseMetaHp = 4 + (metaSave.upgrades.meta_hull || 0) + activeChar.hpBonus;
-  let archetypeHpBonus = 0;
-  if (primaryPath === 'juggernaut') archetypeHpBonus += 2;
-  if (collectedArtifacts.has('reinforced_hull')) archetypeHpBonus += 1;
-  if (collectedArtifacts.has('iron_bastion')) archetypeHpBonus += 1;
-  if (isMarketModActive('mod_titan_chassis')) {
-    archetypeHpBonus += 2;
-    activeBuffs.shieldCharges = Math.max(activeBuffs.shieldCharges, 1);
-  }
-  if (isMarketModActive('mod_glass_cannon')) archetypeHpBonus -= 1;
-  player.maxHp = Math.max(2, baseMetaHp + archetypeHpBonus);
-
   if (floor === 1) {
-    player.hp = player.maxHp;
     activeBallTransformation = 'normal';
     usedUniqueBallsThisRun.clear();
     primaryPath = null;
     secondaryBranch = null;
+    player.hp = undefined;
   }
-
-  // Speed scaling with archetypes & perks
-  let archetypeSpeedMult = 1.0;
-  if (primaryPath === 'fast') archetypeSpeedMult = 1.25;
-  else if (primaryPath === 'juggernaut') archetypeSpeedMult = 0.85;
-
-  let perkSpeedBonus = 1.0;
-  if (collectedArtifacts.has('speed_demon')) perkSpeedBonus += 0.20;
-  if (collectedArtifacts.has('turbo_servo')) perkSpeedBonus += 0.15;
-  if (collectedArtifacts.has('hyper_servo')) perkSpeedBonus += 0.25;
-  if (collectedArtifacts.has('iron_hull')) perkSpeedBonus -= 0.10;
-  if (isMarketModActive('mod_overclocked_servos')) perkSpeedBonus *= 1.30;
-  if (isMarketModActive('mod_titan_chassis')) perkSpeedBonus *= 0.85;
-
-  const charSpeedMult = (activeChar && activeChar.speedMult) || (activeChar && activeChar.stats ? activeChar.stats.speed / 75 : 1.0) || 1.0;
-  const charSmash = (activeChar && activeChar.smashBonus) || (activeChar && activeChar.stats ? activeChar.stats.power / 70 : 1.0) || 1.0;
-  const charSizeMult = (activeChar && activeChar.paddleSizeMult) || (activeChar && activeChar.stats ? activeChar.stats.size / 75 : 1.0) || 1.0;
-
-  const metaSpeed = 1 + (metaSave.upgrades.meta_servos || 0) * 0.08;
-  player.speedMult = metaSpeed * charSpeedMult * archetypeSpeedMult * perkSpeedBonus;
-  player.smashBonus = charSmash * (primaryPath === 'fast' ? 1.2 : 1.0);
-  player.burnChance = (activeChar && activeChar.burnChance) || 0;
-  player.isVoid = !!(activeChar && activeChar.isVoid);
-  player.isChrono = !!(activeChar && activeChar.isChrono);
-  player.droneCommander = !!(activeChar && activeChar.droneCommander);
-  player.glitchArchitect = !!(activeChar && activeChar.glitchArchitect);
-
-  let baseH = CONFIG.basePaddleH * charSizeMult;
-  if (primaryPath === 'juggernaut') baseH *= 1.30;
-  if (collectedArtifacts.has('titanium_paddle')) baseH *= 1.25;
-  if (collectedArtifacts.has('iron_hull')) baseH *= 1.15;
-  if (collectedArtifacts.has('iron_bastion')) baseH *= 1.15;
-  if (collectedArtifacts.has('aegis_bulwark')) baseH *= 1.20;
-  if (collectedArtifacts.has('bismuth_alloy')) baseH *= 1.10;
-  if (collectedArtifacts.has('hyper_servo')) baseH *= 0.95;
-  if (isMarketModActive('mod_overclocked_servos')) baseH *= 0.85;
-  player.h = (!isNaN(baseH) && baseH > 0) ? baseH : CONFIG.basePaddleH;
-  player.w = CONFIG.basePaddleW || 16;
+  recalculatePlayerStats();
   if (floor === 1 || isNaN(player.y) || player.y === undefined) {
     player.y = CONFIG.height / 2 - player.h / 2;
   }
   player.x = 42;
-
-  player.color = primaryPath && BUILD_PATHS[primaryPath] ? BUILD_PATHS[primaryPath].color : (activeChar.color || '#00f2fe');
-  player.modifier = (activeChar && activeChar.modifier) || 'magnetic_edge';
   player.magnetHeldBall = null;
 
   if (player.adrenalineTriggered && player.hp > 1) {
@@ -2351,6 +2543,22 @@ function updateGame(dt) {
 
     if (activeBuffs.fireball > 0) activeBuffs.fireball--;
     if (activeBuffs.lightning > 0) activeBuffs.lightning--;
+    if (activeBuffs.iceBall > 0) activeBuffs.iceBall--;
+    if (activeBuffs.shockBall > 0) activeBuffs.shockBall--;
+    if (activeBuffs.plasmaBall > 0) activeBuffs.plasmaBall--;
+    if (activeBuffs.voidBall > 0) activeBuffs.voidBall--;
+    if (activeBuffs.ricochet > 0) activeBuffs.ricochet--;
+    if (activeBuffs.nanoArmor > 0) activeBuffs.nanoArmor--;
+    if (activeBuffs.kineticReflect > 0) activeBuffs.kineticReflect--;
+    if (activeBuffs.gravityWell > 0) activeBuffs.gravityWell--;
+    if (activeBuffs.cryoField > 0) activeBuffs.cryoField--;
+    if (activeBuffs.overclock > 0) activeBuffs.overclock--;
+    if (activeBuffs.thrusters > 0) activeBuffs.thrusters--;
+    if (activeBuffs.overcharge > 0) activeBuffs.overcharge--;
+    if (activeBuffs.comboLock > 0) {
+      activeBuffs.comboLock--;
+      comboTimer = Math.max(comboTimer, 120);
+    }
     if (activeBuffs.piercing > 0) {
       activeBuffs.piercing--;
       if (activeBuffs.piercing === 0) balls.forEach(b => b.isPiercing = false);
@@ -2374,11 +2582,11 @@ function updateGame(dt) {
     }
 
     // Drone & Autonomous Fleet logic
-    const hasSentry = collectedArtifacts.has('nano_sentry') || player.droneCommander || primaryPath === 'drone' || (activeBuffs.orbitalDrone && activeBuffs.orbitalDrone > 0);
-    const hasSat = collectedArtifacts.has('defense_satellite');
+    const hasSentry = hasArtifact('nano_sentry') || player.droneCommander || primaryPath === 'drone' || (activeBuffs.orbitalDrone && activeBuffs.orbitalDrone > 0);
+    const hasSat = hasArtifact('defense_satellite');
     const hasArcFusion = hasSentry && hasSat;
-    const hasOverclock = collectedArtifacts.has('drone_overclock');
-    const hasMissiles = collectedArtifacts.has('seeker_missiles');
+    const hasOverclock = hasArtifact('drone_overclock');
+    const hasMissiles = hasArtifact('seeker_missiles');
     const hasOrbitalStrike = hasOverclock && hasMissiles;
 
     if (hasSentry) {
@@ -2450,7 +2658,7 @@ function updateGame(dt) {
       }
     }
 
-    if (collectedArtifacts.has('overcharge_capacitor')) {
+    if (hasArtifact('overcharge_capacitor')) {
       overchargeAirTime += 1;
     }
 
@@ -2479,7 +2687,7 @@ function updateGame(dt) {
       }
 
       if (br.acidTicks > 0) {
-        const tickInterval = collectedArtifacts.has('toxic_catalyst') ? 48 : POISON_CONFIG.tickIntervalTicks;
+        const tickInterval = hasArtifact('toxic_catalyst') ? 48 : POISON_CONFIG.tickIntervalTicks;
         if (br.acidTicks % tickInterval === 0) {
           if (window.audio) window.audio.acidSizzle();
           const dmg = Math.max(1, Math.floor(POISON_CONFIG.damagePerTick * (1 - (br.acidResistance || 0))));
@@ -2531,12 +2739,12 @@ function updateGame(dt) {
     for (let i = enemyBullets.length - 1; i >= 0; i--) {
       const eb = enemyBullets[i];
 
-      if (collectedArtifacts.has('gravity_well_inverter') && eb.x < 180) {
+      if (hasArtifact('gravity_well_inverter') && eb.x < 180) {
         eb.vy += (eb.y < player.y + player.h / 2 ? -0.8 : 0.8);
       }
 
       // Guardian Network fusion drone intercept
-      if (collectedArtifacts.has('guardian_drone') && Math.hypot(eb.x - player.x, eb.y - (player.y + player.h / 2)) < 65) {
+      if (hasArtifact('guardian_drone') && Math.hypot(eb.x - player.x, eb.y - (player.y + player.h / 2)) < 65) {
         spawnParticles(eb.x, eb.y, '#00b0ff', 6);
         enemyBullets.splice(i, 1);
         continue;
@@ -2855,7 +3063,7 @@ function updateGame(dt) {
           if (l.x >= br.x && l.x <= br.x + br.w && l.y >= br.y && l.y <= br.y + br.h) {
             queueBrickDamage(br.id, l.damage || 2);
 
-            if (collectedArtifacts.has('prism_lens') && !l.hasSplit) {
+            if (hasArtifact('prism_lens') && !l.hasSplit) {
               lasers.push({ x: br.x + br.w + 2, y: br.y, vx: 12, vy: -3, w: 10, h: 3, color: '#00b0ff', fromPlayer: true, damage: 1, hasSplit: true });
               lasers.push({ x: br.x + br.w + 2, y: br.y + br.h, vx: 12, vy: 3, w: 10, h: 3, color: '#00b0ff', fromPlayer: true, damage: 1, hasSplit: true });
               addFloatingText('PRISM SPLIT!', br.x, br.y - 12, '#00b0ff');
@@ -2888,7 +3096,7 @@ function updateGame(dt) {
       for (let j = 0; j < bricks.length; j++) {
         const br = bricks[j];
         if (pb.x >= br.x && pb.x <= br.x + br.w && pb.y >= br.y && pb.y <= br.y + br.h) {
-          queueBrickDamage(br.id, collectedArtifacts.has('phase_inversion') ? 2 : 1);
+          queueBrickDamage(br.id, hasArtifact('phase_inversion') ? 2 : 1);
           spawnParticles(pb.x, pb.y, '#d500f9', 6);
           pb.life = 0;
           break;
@@ -2899,7 +3107,7 @@ function updateGame(dt) {
         for (let sIdx = window.roomManager.swarmEnemies.length - 1; sIdx >= 0; sIdx--) {
           const se = window.roomManager.swarmEnemies[sIdx];
           if (Math.hypot(pb.x - se.x, pb.y - se.y) < pb.radius + se.radius) {
-            se.hp -= (collectedArtifacts.has('phase_inversion') ? 2 : 1);
+            se.hp -= (hasArtifact('phase_inversion') ? 2 : 1);
             spawnParticles(pb.x, pb.y, '#d500f9', 6);
             pb.life = 0;
             if (se.hp <= 0 && window.roomManager.destroySwarmEnemy) {
@@ -2927,6 +3135,7 @@ function updateGame(dt) {
       if (p.x <= player.x + player.w && p.x + p.w >= player.x &&
           p.y + p.h >= player.y && p.y <= player.y + player.h) {
         applyPowerup(p.type);
+        spawnParticles(p.x + p.w / 2, p.y + p.h / 2, p.color || '#00f2fe', 14);
         if (window.audio) window.audio.powerupGet();
         powerupDrops.splice(i, 1);
         continue;
@@ -2990,7 +3199,7 @@ function updateGame(dt) {
         if (window.audio) window.audio.wallBounce();
       }
 
-      if (collectedArtifacts.has('gravity_well_inverter') && b.vx < 0 && b.x < 110 && b.x > player.x + player.w) {
+      if (hasArtifact('gravity_well_inverter') && b.vx < 0 && b.x < 110 && b.x > player.x + player.w) {
         const pMidY = player.y + player.h / 2;
         b.vy += (pMidY - b.y) * 0.04;
       }
@@ -3010,7 +3219,7 @@ function updateGame(dt) {
         }
       }
 
-      if (collectedArtifacts.has('defense_satellite') && b.vx < 0 &&
+      if (hasArtifact('defense_satellite') && b.vx < 0 &&
           b.x - b.radius <= player.x - 12 && b.x + b.radius >= player.x - 30 &&
           Math.abs(b.y - defenseSatY) < 32) {
         b.x = player.x - 10;
@@ -3082,7 +3291,7 @@ function updateGame(dt) {
 
       if (b.x + b.radius < 0 || b.x < 0) {
         // Chrono Tachyon Rewind check: once per sector saves 1 dropped ball!
-        if (collectedArtifacts.has('tachyon_rewind') && player.tachyonRewindUsed !== currentSector) {
+        if (hasArtifact('tachyon_rewind') && player.tachyonRewindUsed !== currentSector) {
           player.tachyonRewindUsed = currentSector;
           b.x = 220;
           b.y = CONFIG.height / 2;
@@ -3103,7 +3312,7 @@ function updateGame(dt) {
         balls.splice(i, 1);
 
         // Aegis Converter retaliation trigger if applicable
-        if (collectedArtifacts.has('aegis_converter') && activeBuffs.shieldCharges > 0) {
+        if (hasArtifact('aegis_converter') && activeBuffs.shieldCharges > 0) {
           if (window.audio && typeof window.audio.laserShoot === 'function') window.audio.laserShoot();
           for (let k = 0; k < 4; k++) {
             lasers.push({ x: 25, y: b.y - 30 + k * 20, vx: 18, w: 16, h: 4, color: '#d500f9', fromPlayer: true, damage: 2 });
@@ -3183,7 +3392,7 @@ function handlePaddleRebound(b, pad, isPlayer) {
     }
 
     // Velocity Breaker fusion: speed boosts ball smash blast
-    if (collectedArtifacts.has('turbo_servo') && collectedArtifacts.has('kinetic_momentum')) {
+    if (hasArtifact('turbo_servo') && hasArtifact('kinetic_momentum')) {
       if (paddleSpeedMagnitude > 5) {
         screenShake = 6;
         if (window.audio) window.audio.tntExplode();
@@ -3193,7 +3402,7 @@ function handlePaddleRebound(b, pad, isPlayer) {
     }
 
     // Nanite Leech
-    if (collectedArtifacts.has('nanite_leech')) {
+    if (hasArtifact('nanite_leech')) {
       naniteLeechDeflects++;
       if (naniteLeechDeflects >= 20) {
         naniteLeechDeflects = 0;
@@ -3216,7 +3425,7 @@ function handlePaddleRebound(b, pad, isPlayer) {
     }
 
     // Ricochet Shrapnel on sharp edge angles
-    if ((collectedArtifacts.has('ricochet_shrapnel') || collectedArtifacts.has('precision_calibrator')) && hitRel > 0.55) {
+    if ((hasArtifact('ricochet_shrapnel') || hasArtifact('precision_calibrator')) && hitRel > 0.55) {
       if (window.audio) window.audio.laserShoot();
       [-0.25, 0, 0.25].forEach(ang => {
         lasers.push({
@@ -3238,9 +3447,9 @@ function handlePaddleRebound(b, pad, isPlayer) {
     // 25-PATH PROGRESSION RUNTIME EFFECTS: PADDLE DEFLECTION HOOKS
     // ============================================================================
     // Vampiric / Siphon
-    if (collectedArtifacts.has('siphon_nodes') || primaryPath === 'vampiric') {
+    if (hasArtifact('siphon_nodes') || primaryPath === 'vampiric') {
       player.siphonHits = (player.siphonHits || 0) + 1;
-      const reqHits = (collectedArtifacts.has('vampiric_frenzy') && player.hp <= 2) ? 4 : 8;
+      const reqHits = (hasArtifact('vampiric_frenzy') && player.hp <= 2) ? 4 : 8;
       if (player.siphonHits >= reqHits) {
         player.siphonHits = 0;
         if (player.hp < player.maxHp) {
@@ -3248,13 +3457,13 @@ function handlePaddleRebound(b, pad, isPlayer) {
           addFloatingText('+1 HP (NANO-SIPHON)', player.x + 35, player.y - 15, '#e11d48');
           if (window.audio) window.audio.powerupGet();
           updateHud();
-        } else if (collectedArtifacts.has('blood_overdrive') && activeBuffs.shieldCharges < 4) {
+        } else if (hasArtifact('blood_overdrive') && activeBuffs.shieldCharges < 4) {
           activeBuffs.shieldCharges = Math.min(4, activeBuffs.shieldCharges + 1);
           addFloatingText('+1 SHIELD (CRIMSON OVERDRIVE)', player.x + 35, player.y - 15, '#e11d48');
           if (window.audio) window.audio.powerupGet();
           updateHud();
         }
-        if (collectedArtifacts.has('leech_pulse')) {
+        if (hasArtifact('leech_pulse')) {
           shockwaves.push({ x: player.x + player.w, y: player.y + player.h / 2, radius: 10, maxRadius: 90, color: '#e11d48', alpha: 0.8 });
           bricks.forEach(br => {
             if (Math.hypot(br.x + br.w / 2 - player.x, br.y + br.h / 2 - player.y) < 140) br.hp -= 2;
@@ -3264,42 +3473,42 @@ function handlePaddleRebound(b, pad, isPlayer) {
     }
 
     // Pyro / Inferno
-    if (collectedArtifacts.has('combustion_rounds') || primaryPath === 'pyro') {
+    if (hasArtifact('combustion_rounds') || primaryPath === 'pyro') {
       b.isFireball = true;
       b.color = '#ff5500';
     }
-    if (collectedArtifacts.has('thermal_shockwave') && b.isSmash) {
+    if (hasArtifact('thermal_shockwave') && b.isSmash) {
       shockwaves.push({ x: player.x + player.w, y: player.y + player.h / 2, radius: 15, maxRadius: 150, color: '#ff5500', alpha: 0.9 });
       enemyBullets = enemyBullets.filter(eb => Math.hypot(eb.x - player.x, eb.y - player.y) > 160);
       addFloatingText('THERMAL SHOCKWAVE!', player.x + 40, player.y - 15, '#ff5500');
     }
 
     // Gravity / Singularity
-    if (collectedArtifacts.has('gravity_battery')) {
+    if (hasArtifact('gravity_battery')) {
       railgunCharge = Math.min(100, railgunCharge + 12);
     }
-    if (collectedArtifacts.has('singularity_core_prime') && b.isSmash) {
+    if (hasArtifact('singularity_core_prime') && b.isSmash) {
       b.hasSingularityPrime = true;
       addFloatingText('SINGULARITY PRIME SMASH!', player.x + 40, player.y - 15, '#8b5cf6');
     }
 
     // Chrono / Temporal Stasis
-    if (collectedArtifacts.has('stasis_bubble') && Math.abs((b.y - (pad.y + pad.h / 2)) / (pad.h / 2)) < 0.25) {
+    if (hasArtifact('stasis_bubble') && Math.abs((b.y - (pad.y + pad.h / 2)) / (pad.h / 2)) < 0.25) {
       enemyBullets.forEach(eb => { eb.vx *= 0.2; eb.vy *= 0.2; });
       addFloatingText('⏳ STASIS BUBBLE (BULLETS FROZEN)!', player.x + 40, player.y - 20, '#06b6d4');
     }
 
     // Stealth / Phantom Ambush
-    if (player.isCloaked || collectedArtifacts.has('optical_camouflage')) {
+    if (player.isCloaked || hasArtifact('optical_camouflage')) {
       if (player.isCloaked) {
         player.isCloaked = false;
         b.isCritical = true;
         b.speedMultiplier = (b.speedMultiplier || 1) * 1.5;
         addFloatingText('🥷 AMBUSH STRIKE (2.5X CRIT)!', player.x + 40, player.y - 20, '#cbd5e1');
-        if (collectedArtifacts.has('shadow_assassin')) {
+        if (hasArtifact('shadow_assassin')) {
           b.isPiercing = true;
         }
-        if (collectedArtifacts.has('ambush_capacitor')) {
+        if (hasArtifact('ambush_capacitor')) {
           for (let sh = 0; sh < 3; sh++) {
             lasers.push({ x: player.x + player.w + 5, y: player.y + 10 + sh * 15, vx: 18, vy: (sh - 1) * 2, w: 14, h: 4, color: '#64748b', fromPlayer: true, damage: 3 });
           }
@@ -3308,20 +3517,20 @@ function handlePaddleRebound(b, pad, isPlayer) {
     }
 
     // Acoustic / Resonance
-    if (collectedArtifacts.has('ultrasonic_pulse') && b.isSmash) {
+    if (hasArtifact('ultrasonic_pulse') && b.isSmash) {
       shockwaves.push({ x: player.x + player.w, y: player.y + player.h / 2, radius: 10, maxRadius: 200, color: '#ec4899', alpha: 0.8 });
       if (ai && ai.active) ai.speedMult = 0.5;
       addFloatingText('🔊 ULTRASONIC STUN WAVE!', player.x + 40, player.y - 20, '#ec4899');
     }
 
     // Cyberware / Overclock
-    if (collectedArtifacts.has('heat_sink_thrusters') || primaryPath === 'overclock') {
+    if (hasArtifact('heat_sink_thrusters') || primaryPath === 'overclock') {
       player.thermalCharge = Math.min(100, (player.thermalCharge || 0) + 15);
-      if (player.thermalCharge >= 100 && collectedArtifacts.has('steam_vent_blast')) {
+      if (player.thermalCharge >= 100 && hasArtifact('steam_vent_blast')) {
         player.thermalCharge = 0;
         shockwaves.push({ x: player.x + player.w, y: player.y + player.h / 2, radius: 15, maxRadius: 180, color: '#f59e0b', alpha: 0.9 });
         enemyBullets.length = 0;
-        if (collectedArtifacts.has('capacitor_surge') && window.abilityCooldowns) {
+        if (hasArtifact('capacitor_surge') && window.abilityCooldowns) {
           Object.keys(window.abilityCooldowns).forEach(k => { window.abilityCooldowns[k] = Math.floor(window.abilityCooldowns[k] * 0.5); });
         }
         addFloatingText('🔥 THERMAL VENT BLAST!', player.x + 40, player.y - 20, '#f59e0b');
@@ -3329,10 +3538,10 @@ function handlePaddleRebound(b, pad, isPlayer) {
     }
 
     // Prismatic / Refraction
-    if (collectedArtifacts.has('prismatic_facets') || primaryPath === 'mirror') {
+    if (hasArtifact('prismatic_facets') || primaryPath === 'mirror') {
       lasers.push({ x: player.x + player.w + 4, y: player.y + player.h / 2, vx: 15, vy: -b.vy * 0.8, w: 20, h: 4, color: '#38bdf8', fromPlayer: true, damage: 2 });
     }
-    if (collectedArtifacts.has('refraction_splitter') && Math.abs((b.y - (pad.y + pad.h / 2)) / (pad.h / 2)) < 0.25) {
+    if (hasArtifact('refraction_splitter') && Math.abs((b.y - (pad.y + pad.h / 2)) / (pad.h / 2)) < 0.25) {
       if (phantomBalls.length < 4) {
         phantomBalls.push({ x: b.x, y: b.y, vx: b.vx * 0.9, vy: b.vy + 2.5, radius: 5, alpha: 0.8, life: 360 });
         phantomBalls.push({ x: b.x, y: b.y, vx: b.vx * 0.9, vy: b.vy - 2.5, radius: 5, alpha: 0.8, life: 360 });
@@ -3341,20 +3550,20 @@ function handlePaddleRebound(b, pad, isPlayer) {
     }
 
     // Polarity / Magnetic
-    if (collectedArtifacts.has('polarity_repulsor_gate')) {
+    if (hasArtifact('polarity_repulsor_gate')) {
       if (ai && ai.active) ai.x = Math.min(CONFIG.width - 40, ai.x + 30);
       enemyBullets.forEach(eb => { eb.vx = Math.abs(eb.vx) * 0.5; });
       addFloatingText('🧲 POLARITY REPULSOR!', player.x + 40, player.y - 15, '#0ea5e9');
     }
-    if (collectedArtifacts.has('flux_inversion_pulse')) {
+    if (hasArtifact('flux_inversion_pulse')) {
       shockwaves.push({ x: player.x + player.w, y: player.y + player.h / 2, radius: 10, maxRadius: 100, color: '#0ea5e9', alpha: 0.8 });
     }
 
     // Radiant / Solar
-    if (collectedArtifacts.has('photonic_collector') || primaryPath === 'solar') {
+    if (hasArtifact('photonic_collector') || primaryPath === 'solar') {
       player.solarRally = (player.solarRally || 0) + 1;
       b.damageMultiplier = 1.0 + (player.solarRally * 0.12);
-      if (player.solarRally >= 8 && collectedArtifacts.has('supernova_burst_core')) {
+      if (player.solarRally >= 8 && hasArtifact('supernova_burst_core')) {
         player.solarRally = 0;
         screenShake = 12;
         spawnParticles(CONFIG.width / 2, CONFIG.height / 2, '#eab308', 35);
@@ -3365,7 +3574,7 @@ function handlePaddleRebound(b, pad, isPlayer) {
     }
 
     // Inventor / Bennie's Prototype
-    if (collectedArtifacts.has('spring_loaded_bumper') && b.isSmash) {
+    if (hasArtifact('spring_loaded_bumper') && b.isSmash) {
       if (roomType === 'BREAKOUT' && bricks.length > 0) {
         const targetBr = bricks[Math.floor(Math.random() * bricks.length)];
         if (targetBr) {
@@ -3375,7 +3584,7 @@ function handlePaddleRebound(b, pad, isPlayer) {
         }
       }
     }
-    if (collectedArtifacts.has('homing_wrench_drone')) {
+    if (hasArtifact('homing_wrench_drone')) {
       player.wrenchHits = (player.wrenchHits || 0) + 1;
       if (player.wrenchHits >= 4) {
         player.wrenchHits = 0;
@@ -3385,7 +3594,7 @@ function handlePaddleRebound(b, pad, isPlayer) {
     }
 
     // Kinetic battery charge
-    if (collectedArtifacts.has('kinetic_battery')) {
+    if (hasArtifact('kinetic_battery')) {
       railgunCharge = Math.min(100, railgunCharge + 15);
       if (railgunCharge >= 100) {
         if (window.audio) window.audio.hyperActive();
@@ -3394,7 +3603,7 @@ function handlePaddleRebound(b, pad, isPlayer) {
     }
 
     // Spike Plating
-    if (collectedArtifacts.has('spike_plating') && b.speed > 8) {
+    if (hasArtifact('spike_plating') && b.speed > 8) {
       lasers.push({
         x: player.x + player.w + 4,
         y: player.y + player.h / 2,
@@ -3423,7 +3632,7 @@ function handlePaddleRebound(b, pad, isPlayer) {
 
     // --- 49 EXPANSION UPGRADES HOOKS ---
     // Drone Overclock Relay
-    if (collectedArtifacts.has('drone_overclock_relay') && b.isSmash) {
+    if (hasArtifact('drone_overclock_relay') && b.isSmash) {
       for (let d = 0; d < 2; d++) {
         lasers.push({
           x: player.x + player.w + 6,
@@ -3440,7 +3649,7 @@ function handlePaddleRebound(b, pad, isPlayer) {
     }
 
     // Electro Static Discharge & Thunderbolt Core
-    if (collectedArtifacts.has('electro_static_discharge')) {
+    if (hasArtifact('electro_static_discharge')) {
       bricks.slice(0, 2).forEach(br => {
         if (br) {
           br.hp = Math.max(0, br.hp - 1);
@@ -3448,7 +3657,7 @@ function handlePaddleRebound(b, pad, isPlayer) {
         }
       });
     }
-    if (collectedArtifacts.has('electro_thunderbolt_core') && b.isSmash) {
+    if (hasArtifact('electro_thunderbolt_core') && b.isSmash) {
       if (bennieBoss && !bennieBoss.isDefeated && (currentAppScreen === 'BENNIE_BOSS' || roomType === 'BENNIE_ARENA')) {
         damageBennie(3, 'thunderbolt_core');
         spawnParticles(bennieBoss.x, bennieBoss.y, '#00f2fe', 16);
@@ -3464,10 +3673,10 @@ function handlePaddleRebound(b, pad, isPlayer) {
     }
 
     // Ricochet Angle Optimizer & Prism Reflector
-    if (collectedArtifacts.has('ricochet_angle_optimizer')) {
+    if (hasArtifact('ricochet_angle_optimizer')) {
       b.speed = Math.min(b.speed * 1.08, getFloorMaxSpeed());
     }
-    if (collectedArtifacts.has('ricochet_prism_reflector')) {
+    if (hasArtifact('ricochet_prism_reflector')) {
       player.prismReflectCount = (player.prismReflectCount || 0) + 1;
       if (player.prismReflectCount % 4 === 0) {
         lasers.push({ x: b.x, y: b.y, vx: 16, vy: 3, w: 16, h: 4, color: '#38bdf8', fromPlayer: true, damage: 2 });
@@ -3477,7 +3686,7 @@ function handlePaddleRebound(b, pad, isPlayer) {
     }
 
     // Artillery Siege Mortar
-    if (collectedArtifacts.has('artillery_siege_mortar') && (b.speed > 8 || b.isSmash)) {
+    if (hasArtifact('artillery_siege_mortar') && (b.speed > 8 || b.isSmash)) {
       shockwaves.push({ x: player.x + player.w + 40, y: player.y + player.h / 2, radius: 10, maxRadius: 60, color: '#f59e0b', alpha: 0.8 });
       bricks.forEach(br => {
         if (Math.hypot(br.x - (player.x + 80), br.y - (player.y + player.h / 2)) < 60) br.hp = Math.max(0, br.hp - 2);
@@ -3486,7 +3695,7 @@ function handlePaddleRebound(b, pad, isPlayer) {
     }
 
     // Gambler Roulette Core
-    if (collectedArtifacts.has('gambler_roulette_core')) {
+    if (hasArtifact('gambler_roulette_core')) {
       player.rouletteSpins = (player.rouletteSpins || 0) + 1;
       if (player.rouletteSpins % 7 === 0) {
         const roll = Math.random();
@@ -3505,7 +3714,7 @@ function handlePaddleRebound(b, pad, isPlayer) {
     }
 
     // Inventor Gear Launcher & Spring Bumper
-    if (collectedArtifacts.has('inventor_gear_launcher') && b.isSmash) {
+    if (hasArtifact('inventor_gear_launcher') && b.isSmash) {
       for (let g = 0; g < 2; g++) {
         lasers.push({
           x: player.x + player.w + 6,
@@ -3572,13 +3781,13 @@ function handlePaddleRebound(b, pad, isPlayer) {
       updateHud();
     }
 
-    if (collectedArtifacts.has('quantum_cluster') && combo % 4 === 0) {
+    if (hasArtifact('quantum_cluster') && combo % 4 === 0) {
       phantomBalls.push({ x: b.x, y: b.y, vx: b.vx, vy: b.vy + 3, radius: 5.5, alpha: 0.8, life: 120 });
       phantomBalls.push({ x: b.x, y: b.y, vx: b.vx, vy: b.vy - 3, radius: 5.5, alpha: 0.8, life: 120 });
       addFloatingText('QUANTUM PHANTOMS!', b.x, b.y, '#00b0ff');
     }
 
-    if (!player.isVoid && collectedArtifacts.has('vampiric_touch') && combo % 8 === 0 && player.hp < player.maxHp) {
+    if (!player.isVoid && hasArtifact('vampiric_touch') && combo % 8 === 0 && player.hp < player.maxHp) {
       player.hp++;
       if (window.audio) window.audio.powerupGet();
       addFloatingText('+1 HP', player.x + 25, player.y, '#ff2a6d');
@@ -3606,7 +3815,7 @@ function handlePaddleRebound(b, pad, isPlayer) {
     if (window.audio) window.audio.aiHit();
 
     // Cryo synergy: if ball is cryo coated or active cryo buff, freeze AI paddle
-    if (b.isCryoCoated || activeBallTransformation === 'cryo' || collectedArtifacts.has('cryo_frostbite')) {
+    if (b.isCryoCoated || activeBallTransformation === 'cryo' || hasArtifact('cryo_frostbite')) {
       ai.frozenTimer = 180;
       spawnParticles(ai.x, ai.y + ai.h / 2, '#00e5ff', 12);
       addFloatingText('❄️ AI FROZEN (3s)!', ai.x - 40, ai.y, '#00e5ff');
@@ -3713,15 +3922,15 @@ function handlePaddleRebound(b, pad, isPlayer) {
 }
 
 function checkBrickCollisions(b) {
-  const isFire = (activeBallTransformation === 'inferno') || (activeBuffs.fireball > 0) || collectedArtifacts.has('fireball_core');
+  const isFire = (activeBallTransformation === 'inferno') || (activeBuffs.fireball > 0) || hasArtifact('fireball_core');
   const isMega = activeBuffs.megaBall > 0;
-  const isAcid = (activeBallTransformation === 'acid') || collectedArtifacts.has('bio_residue');
-  const isCryo = (activeBallTransformation === 'cryo') || collectedArtifacts.has('cryo_frostbite');
+  const isAcid = (activeBallTransformation === 'acid') || hasArtifact('bio_residue');
+  const isCryo = (activeBallTransformation === 'cryo') || hasArtifact('cryo_frostbite');
 
   for (let i = 0; i < bricks.length; i++) {
     const br = bricks[i];
 
-    if (br.type === 'phase' && !br.isTangible && !collectedArtifacts.has('phase_inversion')) continue;
+    if (br.type === 'phase' && !br.isTangible && !hasArtifact('phase_inversion')) continue;
 
     const overlapX = (br.w / 2 + b.radius) - Math.abs(b.x - (br.x + br.w / 2));
     const overlapY = (br.h / 2 + b.radius) - Math.abs(b.y - (br.y + br.h / 2));
@@ -3753,12 +3962,12 @@ function checkBrickCollisions(b) {
         if (window.audio) window.audio.wallBounce();
       }
 
-      if (collectedArtifacts.has('corrosive_coating')) {
+      if (hasArtifact('corrosive_coating')) {
         br.acidResistance = 0.0;
         br.shieldStripped = true;
       }
 
-      if (collectedArtifacts.has('kinetic_concussion') && b.speed > 8) {
+      if (hasArtifact('kinetic_concussion') && b.speed > 8) {
         screenShake = 6;
         if (window.audio) window.audio.tntExplode();
         spawnParticles(br.x, br.y, '#f43f5e', 10);
@@ -3781,7 +3990,7 @@ function checkBrickCollisions(b) {
           spawnParticles(br.x + br.w / 2, br.y + br.h / 2, '#00e5ff', 12);
           addFloatingText('SHATTERED!', br.x, br.y, '#00e5ff');
 
-          const isAbsoluteZero = collectedArtifacts.has('cryo_frostbite') && collectedArtifacts.has('toxic_catalyst');
+          const isAbsoluteZero = hasArtifact('cryo_frostbite') && hasArtifact('toxic_catalyst');
           for (let n = 0; n < bricks.length; n++) {
             const nb = bricks[n];
             if (nb.id !== br.id && Math.hypot(nb.x - br.x, nb.y - br.y) < (isAbsoluteZero ? 90 : 65)) {
@@ -3806,12 +4015,12 @@ function checkBrickCollisions(b) {
         baseDamage = Math.round(baseDamage * 2.5);
       }
 
-      if (collectedArtifacts.has('overcharge_capacitor')) {
+      if (hasArtifact('overcharge_capacitor')) {
         const overchargeMultiplier = 1 + Math.min(1.0, overchargeAirTime / 120);
         baseDamage = Math.round(baseDamage * overchargeMultiplier);
       }
 
-      if (collectedArtifacts.has('echo_chamber')) {
+      if (hasArtifact('echo_chamber')) {
         const echoBonus = Math.floor(balls.length * 0.4);
         baseDamage += echoBonus;
       }
@@ -4143,9 +4352,9 @@ function damagePlayer(rawAmount = 1, type = 'generic', source = null) {
   // 2. Integer Damage Tiers & Defensive Mitigation
   let finalDmg = Math.max(1, Math.round(rawAmount));
   const hasArmor = primaryPath === 'juggernaut' ||
-    collectedArtifacts.has('reinforced_hull') ||
-    collectedArtifacts.has('titan_plating') ||
-    collectedArtifacts.has('nanite_barrier') ||
+    hasArtifact('reinforced_hull') ||
+    hasArtifact('titan_plating') ||
+    hasArtifact('nanite_barrier') ||
     (activeChar && (activeChar.id === 'bastion' || activeChar.id === 'dreadnought'));
 
   if (hasArmor) {
@@ -4163,7 +4372,34 @@ function damagePlayer(rawAmount = 1, type = 'generic', source = null) {
     }
   }
 
-  // 3. Second Chance / Defibrillator Check
+  // 3a. Legendary Emergency Matrix Drop Failsafe
+  if (activeBuffs.emergencyMatrix > 0 && player.hp <= finalDmg) {
+    activeBuffs.emergencyMatrix--;
+    if (window.audio && typeof window.audio.powerupGet === 'function') window.audio.powerupGet();
+    screenShake = 16;
+    player.hp = Math.max(2, Math.min(player.maxHp, 2));
+    player.invulnerableTimer = 180;
+    activeBuffs.shieldCharges = Math.min(4, (activeBuffs.shieldCharges || 0) + 2);
+    enemyBullets.length = 0;
+    shockwaves.push({
+      x: player.x + player.w / 2,
+      y: player.y + player.h / 2,
+      radius: 12,
+      maxRadius: 360,
+      speed: 16,
+      alpha: 1
+    });
+    if (ai && ai.active) ai.stunTimer = Math.max(ai.stunTimer || 0, 180);
+    if (window.roomManager && window.roomManager.swarmEnemies) {
+      window.roomManager.swarmEnemies.forEach(e => { e.frozen = true; e.vx = 8; });
+    }
+    spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#ec4899', 24);
+    addFloatingText('🧬 EMERGENCY MATRIX SAVED YOU! (+2 HP, +2 SHIELD, EMP STASIS)', player.x + 35, player.y - 25, '#ec4899');
+    updateHud();
+    return 0;
+  }
+
+  // 3b. Second Chance / Defibrillator Check
   if (secondChanceAvailable && player.hp <= finalDmg) {
     secondChanceAvailable = false;
     if (window.audio) window.audio.powerupGet();
@@ -4186,7 +4422,7 @@ function damagePlayer(rawAmount = 1, type = 'generic', source = null) {
   }
 
   // Shock Absorber perk
-  if (collectedArtifacts.has('shock_absorber')) {
+  if (hasArtifact('shock_absorber')) {
     shockwaves.push({
       x: player.x + player.w / 2,
       y: player.y + player.h / 2,
@@ -4197,7 +4433,7 @@ function damagePlayer(rawAmount = 1, type = 'generic', source = null) {
     });
   }
 
-  if (collectedArtifacts.has('adaptive_plating')) {
+  if (hasArtifact('adaptive_plating')) {
     player.invulnerableTimer = 180;
     addFloatingText('ADAPTIVE SHIELD (3s)!', player.x + 35, player.y, '#00b0ff');
   }
@@ -4816,15 +5052,18 @@ function draw() {
       const def = reg[p.type] || POWERUP_DEFS[p.type] || { icon: '★', color: '#ffd700', rarity: 'Common', category: 'ATTACK' };
       const rarityColor = def.color || (def.rarity === 'Legendary' ? '#ffd700' : (def.rarity === 'Epic' ? '#d500f9' : (def.rarity === 'Rare' ? '#00b0ff' : '#00f2fe')));
       
+      const bobY = Math.sin((Date.now() / 240) + p.x * 0.08) * 3;
+      const drawY = p.y + bobY;
+
       ctx.save();
       ctx.shadowColor = rarityColor;
-      ctx.shadowBlur = def.rarity === 'Legendary' ? 14 : 8;
+      ctx.shadowBlur = def.rarity === 'Legendary' ? 16 : (def.rarity === 'Epic' ? 12 : 8);
       ctx.fillStyle = 'rgba(11, 19, 43, 0.94)';
       ctx.beginPath();
       if (typeof ctx.roundRect === 'function') {
-        ctx.roundRect(p.x, p.y, p.w, p.h, 6);
+        ctx.roundRect(p.x, drawY, p.w, p.h, 6);
       } else {
-        ctx.rect(p.x, p.y, p.w, p.h);
+        ctx.rect(p.x, drawY, p.w, p.h);
       }
       ctx.fill();
 
@@ -4832,11 +5071,23 @@ function draw() {
       ctx.lineWidth = def.rarity === 'Legendary' ? 2.5 : 1.8;
       ctx.stroke();
 
+      // Pulsing outer aura ring for Epic and Legendary drops
+      if (def.rarity === 'Legendary' || def.rarity === 'Epic') {
+        const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 200);
+        ctx.strokeStyle = rarityColor;
+        ctx.globalAlpha = 0.35 + 0.35 * pulse;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(p.x + p.w / 2, drawY + p.h / 2, (p.w / 2) + 4 + 2 * pulse, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+      }
+
       ctx.shadowBlur = 0;
       ctx.font = '14px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(def.icon, p.x + p.w / 2, p.y + p.h / 2);
+      ctx.fillText(def.icon, p.x + p.w / 2, drawY + p.h / 2);
       ctx.restore();
     });
 
@@ -4867,8 +5118,8 @@ function draw() {
     drawPaddleGraphic(ctx, player.x, player.y, player.w, player.h, pColor);
     ctx.globalAlpha = 1;
 
-    const hasSentry = collectedArtifacts.has('nano_sentry') || player.droneCommander || primaryPath === 'drone' || (activeBuffs.orbitalDrone && activeBuffs.orbitalDrone > 0);
-    const hasSat = collectedArtifacts.has('defense_satellite');
+    const hasSentry = hasArtifact('nano_sentry') || player.droneCommander || primaryPath === 'drone' || (activeBuffs.orbitalDrone && activeBuffs.orbitalDrone > 0);
+    const hasSat = hasArtifact('defense_satellite');
 
     let sentryX = 0, sentryY = 0;
     if (hasSentry) {
@@ -4941,10 +5192,10 @@ function draw() {
       ctx.fill();
     });
 
-    const isFire = (activeBallTransformation === 'inferno') || (activeBuffs.fireball > 0) || collectedArtifacts.has('fireball_core');
-    const isAcid = (activeBallTransformation === 'acid') || collectedArtifacts.has('bio_residue');
-    const isCryo = (activeBallTransformation === 'cryo') || collectedArtifacts.has('cryo_frostbite');
-    const isVortex = (activeBallTransformation === 'graviton') || collectedArtifacts.has('graviton_core');
+    const isFire = (activeBallTransformation === 'inferno') || (activeBuffs.fireball > 0) || hasArtifact('fireball_core');
+    const isAcid = (activeBallTransformation === 'acid') || hasArtifact('bio_residue');
+    const isCryo = (activeBallTransformation === 'cryo') || hasArtifact('cryo_frostbite');
+    const isVortex = (activeBallTransformation === 'graviton') || hasArtifact('graviton_core');
     const isDarkMatter = (activeBallTransformation === 'dark_matter');
 
     balls.forEach(b => {
@@ -5300,8 +5551,8 @@ function updateHud() {
   // Real Runtime Drone Indicator (Compact Icon-First)
   const droneBadge = document.getElementById('hudDroneBadge');
   if (droneBadge) {
-    const hasSentry = collectedArtifacts.has('nano_sentry') || player.droneCommander || primaryPath === 'drone' || (activeBuffs.orbitalDrone && activeBuffs.orbitalDrone > 0);
-    const hasSat = collectedArtifacts.has('defense_satellite');
+    const hasSentry = hasArtifact('nano_sentry') || player.droneCommander || primaryPath === 'drone' || (activeBuffs.orbitalDrone && activeBuffs.orbitalDrone > 0);
+    const hasSat = hasArtifact('defense_satellite');
     const hasSwarmCore = (typeof isMarketModActive === 'function' && isMarketModActive('mod_drone_swarm_core'));
 
     let totalDrones = 0;
@@ -5310,7 +5561,7 @@ function updateHud() {
     if (hasSwarmCore) totalDrones++;
 
     if (totalDrones > 0) {
-      const hasOverclock = collectedArtifacts.has('overclock_drone');
+      const hasOverclock = hasArtifact('overclock_drone');
       const targetTick = hasOverclock ? 45 : (player.droneCommander ? 54 : 90);
       const readinessPct = Math.min(100, Math.floor((sentryShootTick / targetTick) * 100));
       const statusText = readinessPct >= 100 ? 'READY' : `${readinessPct}%`;
@@ -5413,7 +5664,7 @@ function updateHud() {
   }
 
   const railCont = document.getElementById('railgunContainer');
-  if (collectedArtifacts.has('kinetic_battery')) {
+  if (hasArtifact('kinetic_battery')) {
     railCont.style.display = 'flex';
     document.getElementById('railgunPct').textContent = `${railgunCharge}%`;
     document.getElementById('railgunFill').style.width = `${railgunCharge}%`;
@@ -5424,10 +5675,27 @@ function updateHud() {
   const shelf = document.getElementById('buffsShelf');
   shelf.innerHTML = '';
 
+  if (activeBuffs.emergencyMatrix > 0) appendBuffChip(shelf, '🧬 MATRIX ARMED', `${activeBuffs.emergencyMatrix} FAILSAFE`, '#ec4899');
   if (player.invulnerableTimer > 0) appendBuffChip(shelf, '🛡️ INVULNERABLE', `${(player.invulnerableTimer / 60).toFixed(1)}s`, '#00f2fe');
   if (player.isOverdrive) appendBuffChip(shelf, '🔥 OVERDRIVE', 'MAX SPEED', '#ff2a6d');
   if (activeBuffs.fireball > 0) appendBuffChip(shelf, '🔥 FIREBALL', `${Math.ceil(activeBuffs.fireball / 60)}s`, '#ff5500');
   if (activeBuffs.lightning > 0) appendBuffChip(shelf, '⚡ LIGHTNING', `${Math.ceil(activeBuffs.lightning / 60)}s`, '#00b0ff');
+  if (activeBuffs.iceBall > 0) appendBuffChip(shelf, '❄️ CRYO BALL', `${Math.ceil(activeBuffs.iceBall / 60)}s`, '#00f2fe');
+  if (activeBuffs.shockBall > 0) appendBuffChip(shelf, '⚡ SHOCK BALL', `${Math.ceil(activeBuffs.shockBall / 60)}s`, '#ffd700');
+  if (activeBuffs.plasmaBall > 0) appendBuffChip(shelf, '🟣 PLASMA', `${Math.ceil(activeBuffs.plasmaBall / 60)}s`, '#a855f7');
+  if (activeBuffs.piercing > 0) appendBuffChip(shelf, '🎯 PIERCE', `${Math.ceil(activeBuffs.piercing / 60)}s`, '#f43f5e');
+  if (activeBuffs.voidBall > 0) appendBuffChip(shelf, '🌌 VOID', `${Math.ceil(activeBuffs.voidBall / 60)}s`, '#6366f1');
+  if (activeBuffs.ricochet > 0) appendBuffChip(shelf, '🔀 RICOCHET', `${Math.ceil(activeBuffs.ricochet / 60)}s`, '#10b981');
+  if (activeBuffs.nanoArmor > 0) appendBuffChip(shelf, '🛡️ NANO ARMOR', `${Math.ceil(activeBuffs.nanoArmor / 60)}s`, '#38bdf8');
+  if (activeBuffs.kineticReflect > 0) appendBuffChip(shelf, '⚡ REFLECT', `${Math.ceil(activeBuffs.kineticReflect / 60)}s`, '#06b6d4');
+  if (activeBuffs.magnet > 0) appendBuffChip(shelf, '🧲 VACUUM', `${Math.ceil(activeBuffs.magnet / 60)}s`, '#14b8a6');
+  if (activeBuffs.orbitalDrone > 0) appendBuffChip(shelf, '🤖 DRONE', `${Math.ceil(activeBuffs.orbitalDrone / 60)}s`, '#eab308');
+  if (activeBuffs.gravityWell > 0) appendBuffChip(shelf, '🌀 GRAV-WELL', `${Math.ceil(activeBuffs.gravityWell / 60)}s`, '#8b5cf6');
+  if (activeBuffs.cryoField > 0) appendBuffChip(shelf, '❄️ CRYO FIELD', `${Math.ceil(activeBuffs.cryoField / 60)}s`, '#38bdf8');
+  if (activeBuffs.overclock > 0) appendBuffChip(shelf, '⚡ OVERCLOCK', `${Math.ceil(activeBuffs.overclock / 60)}s`, '#f97316');
+  if (activeBuffs.thrusters > 0) appendBuffChip(shelf, '🚀 THRUSTERS', `${Math.ceil(activeBuffs.thrusters / 60)}s`, '#3b82f6');
+  if (activeBuffs.comboLock > 0) appendBuffChip(shelf, '🔒 COMBO LOCK', `${Math.ceil(activeBuffs.comboLock / 60)}s`, '#ec4899');
+  if (activeBuffs.overcharge > 0) appendBuffChip(shelf, '💥 SUPERCHARGE', `${Math.ceil(activeBuffs.overcharge / 60)}s`, '#ef4444');
   if (activeBuffs.twinBlasters > 0) appendBuffChip(shelf, '🤖 BLASTERS', 'ACTIVE', '#d500f9');
   if (activeBuffs.megaBall > 0) appendBuffChip(shelf, '🌕 MEGA BALL', `${Math.ceil(activeBuffs.megaBall / 60)}s`, '#ffd700');
   if (activeBuffs.shieldCharges > 0) appendBuffChip(shelf, '🛡️ SHIELD', `x${activeBuffs.shieldCharges}`, '#00b0ff');
@@ -5582,14 +5850,33 @@ function openSecondaryPathModal() {
 // CYBERPUNK CASINO MODAL (Single Source of Truth)
 function openCasinoModal() {
   currentAppScreen = 'CASINO_MODAL';
+  isCasinoWheelAnimating = false;
+  window.isCasinoWheelAnimating = false;
+  casinoWheelCurrentAngle = 0;
+  if (window.roomManager) {
+    window.roomManager.casinoIsSpinning = false;
+  }
+
   const overlay = document.getElementById('casinoOverlay');
   updateDataChipsDisplay();
-  document.getElementById('casinoSpinsRemaining').textContent = `${window.roomManager.casinoMaxSpins - window.roomManager.casinoSpinsUsed} / ${window.roomManager.casinoMaxSpins}`;
-  document.getElementById('casinoOutcomeText').textContent = 'Place your wager and spin the wheel!';
+
+  const spinsUsed = window.roomManager ? (window.roomManager.casinoSpinsUsed || 0) : 0;
+  const maxSpins = window.roomManager ? (window.roomManager.casinoMaxSpins || 3) : 3;
+  const spinsRemainingEl = document.getElementById('casinoSpinsRemaining');
+  if (spinsRemainingEl) spinsRemainingEl.textContent = `${Math.max(0, maxSpins - spinsUsed)} / ${maxSpins}`;
+
+  const outcomeEl = document.getElementById('casinoOutcomeText');
+  if (outcomeEl) outcomeEl.textContent = 'Place your wager and spin the wheel!';
+
+  const spinBtn = document.getElementById('btnSpinWheel');
+  if (spinBtn) spinBtn.disabled = (spinsUsed >= maxSpins);
+
+  const leaveBtn = document.getElementById('btnLeaveCasino');
+  if (leaveBtn) leaveBtn.disabled = false;
 
   drawCasinoWheel(0);
   renderCasinoOddsTable();
-  overlay.classList.remove('hidden');
+  if (overlay) overlay.classList.remove('hidden');
 }
 
 function renderCasinoOddsTable() {
@@ -5717,7 +6004,7 @@ function openDraftModal() {
   if (window.audio) window.audio.cardDraftChime();
 
   const eligibleArtifacts = Object.values(ARTIFACT_DEFINITIONS).filter(a => {
-    if (collectedArtifacts.has(a.id)) return false;
+    if (hasArtifact(a.id)) return false;
     if (a.isUniqueBall && usedUniqueBallsThisRun.has(a.isUniqueBall)) return false;
     if (a.archetype && a.archetype !== 'general' && !isPathUnlocked(a.archetype)) return false;
 
@@ -5762,7 +6049,7 @@ function openDraftModal() {
       let w = 1.0;
       if (primaryPath && a.archetype === primaryPath) w += 0.6;
       if (secondaryBranch && a.archetype === secondaryBranch) w += 0.4;
-      if (a.partner && collectedArtifacts.has(a.partner)) w += 1.0; // Fusion partner boost!
+      if (a.partner && hasArtifact(a.partner)) w += 1.0; // Fusion partner boost!
       return w;
     });
     const totalW = weights.reduce((s, w) => s + w, 0);
@@ -5793,7 +6080,7 @@ function openDraftModal() {
   choices.forEach((art, index) => {
     const card = document.createElement('div');
     const rarityClass = art.rarity.replace('_', '-');
-    const hasPartner = art.partner && collectedArtifacts.has(art.partner);
+    const hasPartner = art.partner && hasArtifact(art.partner);
     const fusionData = art.fusionId ? FUSIONS[art.fusionId] : null;
 
     card.className = `draft-card-3d ${rarityClass} ${hasPartner ? 'fusion-ready' : ''}`;
@@ -5871,7 +6158,7 @@ function executeCardSelectionSequence(selectedCard, art) {
 
   setTimeout(() => {
     window.addCollectedArtifact(art.id);
-    if (art.partner && collectedArtifacts.has(art.partner) && art.fusionId) {
+    if (art.partner && hasArtifact(art.partner) && art.fusionId) {
       recordCodexDiscovery(art.fusionId);
     }
     if (art.isUniqueBall) {
@@ -5890,8 +6177,8 @@ function checkFusionsDiscovery(newArtId) {
   if (typeof FUSIONS === 'undefined') return;
   Object.values(FUSIONS).forEach(fus => {
     if ((fus.item1 === newArtId || fus.item2 === newArtId) &&
-        collectedArtifacts.has(fus.item1) &&
-        collectedArtifacts.has(fus.item2)) {
+        hasArtifact(fus.item1) &&
+        hasArtifact(fus.item2)) {
       if (!window.activeFusionsThisRun) window.activeFusionsThisRun = new Set();
       if (!window.activeFusionsThisRun.has(fus.id)) {
         window.activeFusionsThisRun.add(fus.id);
@@ -5945,28 +6232,24 @@ function createFusionToastContainer() {
 
 window.addCollectedArtifact = function(artId) {
   if (!artId) return;
-  const isNew = !collectedArtifacts.has(artId);
+  const isNew = !hasArtifact(artId);
   collectedArtifacts.add(artId);
   recordCodexDiscovery(artId);
   checkFusionsDiscovery(artId);
 
   // Immediate stat recalculation and heals for mid-run pickups
   if (isNew) {
-    if (artId === 'reinforced_hull') {
-      player.maxHp = (player.maxHp || 4) + 1;
-      player.hp = Math.min(player.maxHp, (player.hp || 4) + 1);
+    recalculatePlayerStats();
+    if (artId === 'reinforced_hull' || hasArtifact('reinforced_hull')) {
       if (typeof addFloatingText === 'function') addFloatingText('+1 MAX HP & HEAL (REINFORCED HULL)', player.x + 35, player.y, '#00e676');
-    } else if (artId === 'iron_bastion') {
-      player.maxHp = (player.maxHp || 4) + 1;
-      player.hp = Math.min(player.maxHp, (player.hp || 4) + 1);
-      player.h = Math.round((player.h || CONFIG.basePaddleH) * 1.15);
+    } else if (artId === 'iron_bastion' || hasArtifact('iron_bastion')) {
       if (typeof addFloatingText === 'function') addFloatingText('+1 MAX HP & +15% WIDTH (IRON BASTION)', player.x + 35, player.y, '#00e676');
-    } else if (artId === 'aegis_bulwark') {
-      player.h = Math.round((player.h || CONFIG.basePaddleH) * 1.20);
+    } else if (artId === 'aegis_bulwark' || hasArtifact('aegis_bulwark')) {
       if (typeof addFloatingText === 'function') addFloatingText('+20% WIDTH (AEGIS BULWARK)', player.x + 35, player.y, '#00b0ff');
-    } else if (artId === 'bismuth_alloy') {
-      player.h = Math.round((player.h || CONFIG.basePaddleH) * 1.10);
+    } else if (artId === 'bismuth_alloy' || hasArtifact('bismuth_alloy')) {
       if (typeof addFloatingText === 'function') addFloatingText('+10% WIDTH (BISMUTH ALLOY)', player.x + 35, player.y, '#ffd700');
+    } else if (hasArtifact('speed_demon') || hasArtifact('turbo_servo')) {
+      if (typeof addFloatingText === 'function') addFloatingText('+SPEED SURGE', player.x + 35, player.y, '#00f2fe');
     }
   }
 
@@ -6000,8 +6283,8 @@ function renderPauseMenuDetails() {
   fusionsBox.innerHTML = '';
 
   Object.values(FUSIONS).forEach(fus => {
-    const has1 = collectedArtifacts.has(fus.item1);
-    const has2 = collectedArtifacts.has(fus.item2);
+    const has1 = hasArtifact(fus.item1);
+    const has2 = hasArtifact(fus.item2);
     const isComplete = has1 && has2;
 
     const name1 = ARTIFACT_DEFINITIONS[fus.item1]?.name || fus.item1;
@@ -7277,6 +7560,14 @@ document.getElementById('btnCloseLeaderboard')?.addEventListener('click', () => 
   document.getElementById('leaderboardOverlay')?.classList.add('hidden');
   currentAppScreen = 'HOME';
 });
+document.getElementById('btnScopeGlobal')?.addEventListener('click', () => {
+  leaderboardScope = 'GLOBAL';
+  renderLeaderboardTab(activeLeaderboardTab);
+});
+document.getElementById('btnScopeLocal')?.addEventListener('click', () => {
+  leaderboardScope = 'LOCAL';
+  renderLeaderboardTab(activeLeaderboardTab);
+});
 document.querySelectorAll('.leaderboard-tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     renderLeaderboardTab(btn.dataset.tab);
@@ -7617,15 +7908,34 @@ document.getElementById('btnSpinWheel')?.addEventListener('click', () => {
     if (progress < 1) {
       requestAnimationFrame(animateWheel);
     } else {
-      isCasinoWheelAnimating = false;
-      casinoWheelCurrentAngle = targetEnd % (Math.PI * 2);
-      drawCasinoWheel(casinoWheelCurrentAngle);
-      window.roomManager.applyCasinoOutcome(res.outcome, player, addFloatingText);
-      document.getElementById('casinoOutcomeText').textContent = res.outcome.label || res.outcome.text || 'WAGER COMPLETE';
-      updateDataChipsDisplay();
-      document.getElementById('casinoSpinsRemaining').textContent = `${window.roomManager.casinoMaxSpins - window.roomManager.casinoSpinsUsed} / ${window.roomManager.casinoMaxSpins}`;
-      document.getElementById('btnSpinWheel').disabled = window.roomManager.casinoSpinsUsed >= window.roomManager.casinoMaxSpins;
-      document.getElementById('btnLeaveCasino').disabled = false;
+      try {
+        isCasinoWheelAnimating = false;
+        window.isCasinoWheelAnimating = false;
+        if (window.roomManager) window.roomManager.casinoIsSpinning = false;
+        casinoWheelCurrentAngle = targetEnd % (Math.PI * 2);
+        drawCasinoWheel(casinoWheelCurrentAngle);
+        window.roomManager.applyCasinoOutcome(res.outcome, player, addFloatingText);
+        const outcomeLabel = res.outcome.label || res.outcome.text || 'WAGER COMPLETE';
+        const outcomeEl = document.getElementById('casinoOutcomeText');
+        if (outcomeEl) outcomeEl.textContent = outcomeLabel;
+      } catch (applyErr) {
+        console.error("Safely caught casino wheel resolution error:", applyErr);
+      } finally {
+        isCasinoWheelAnimating = false;
+        window.isCasinoWheelAnimating = false;
+        if (window.roomManager) window.roomManager.casinoIsSpinning = false;
+        updateDataChipsDisplay();
+        const spinsEl = document.getElementById('casinoSpinsRemaining');
+        if (spinsEl && window.roomManager) {
+          spinsEl.textContent = `${Math.max(0, window.roomManager.casinoMaxSpins - window.roomManager.casinoSpinsUsed)} / ${window.roomManager.casinoMaxSpins}`;
+        }
+        const spinBtn = document.getElementById('btnSpinWheel');
+        if (spinBtn && window.roomManager) {
+          spinBtn.disabled = window.roomManager.casinoSpinsUsed >= window.roomManager.casinoMaxSpins;
+        }
+        const leaveBtn = document.getElementById('btnLeaveCasino');
+        if (leaveBtn) leaveBtn.disabled = false;
+      }
     }
   }
 
@@ -8056,7 +8366,9 @@ document.getElementById('adminRefreshInspector')?.addEventListener('click', () =
 // BENNIE BOSS PREPARATION, ARENA & BATTLE ENGINE
 // ============================================================================
 let selectedBenniePath = 'inventor';
+window.selectedBenniePath = selectedBenniePath;
 const selectedBennieUpgrades = new Set();
+window.selectedBennieUpgrades = selectedBennieUpgrades;
 let bennieBoss = null;
 
 function openBenniePrepModal() {
@@ -8064,6 +8376,8 @@ function openBenniePrepModal() {
   if (!modal) return;
   modal.classList.remove('hidden');
   syncBennieBossHudVisibility();
+  window.selectedBenniePath = selectedBenniePath;
+  window.selectedBennieUpgrades = selectedBennieUpgrades;
   renderBenniePrepModal();
 }
 window.openBenniePrepModal = openBenniePrepModal;
@@ -8072,6 +8386,15 @@ function closeBenniePrepModal() {
   const modal = document.getElementById('benniePrepModal');
   if (modal) modal.classList.add('hidden');
 }
+
+function clearBenniePrepLoadout() {
+  selectedBenniePath = 'inventor';
+  window.selectedBenniePath = 'inventor';
+  selectedBennieUpgrades.clear();
+  renderBenniePrepModal();
+  if (window.audio && typeof window.audio.click === 'function') window.audio.click();
+}
+window.clearBenniePrepLoadout = clearBenniePrepLoadout;
 
 function renderBenniePrepModal() {
   const pathsGrid = document.getElementById('benniePrepPathsGrid');
@@ -8299,13 +8622,14 @@ function startBennieBossBattle(pathId, upgradeIds) {
   currentSector = 5;
 
   // Setup player temporary experimental state
-  player.hp = 5;
-  player.maxHp = 5;
   player.invulnerableTimer = 60;
   collectedArtifacts.clear();
   primaryPath = pathId || 'inventor';
   secondaryBranch = 'chrono';
   (upgradeIds || []).forEach(id => collectedArtifacts.add(id));
+  recalculatePlayerStats();
+  player.hp = Math.max(5, player.maxHp);
+  player.maxHp = player.hp;
 
   // Strictly deactivate and remove standard AI opponent paddle from Bennie arena
   ai.active = false;
@@ -9202,30 +9526,92 @@ function drawBennieBoss(ctx) {
 
   ctx.restore(); // restore skull translation
 
-  // Speech bubble
+  // Speech bubble (Responsive Word-Wrapped Bubble with Safe Screen Margins & Pointer Tail)
   if (b.quipTimer > 0 && b.quipText) {
     ctx.save();
     ctx.font = '800 12px sans-serif';
-    const textW = ctx.measureText(b.quipText).width;
-    const bubbleW = textW + 24;
-    const bubbleH = 30;
-    const bx = b.x - bubbleW / 2;
-    const by = b.y - 75;
+    ctx.textBaseline = 'middle';
 
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+    // 1. Calculate optimal wrapped lines within maximum width
+    const maxTextW = Math.min(270, (CONFIG.width || 800) - 48);
+    const words = b.quipText.split(' ');
+    const lines = [];
+    let currentLine = '';
+
+    for (let w = 0; w < words.length; w++) {
+      const word = words[w];
+      const testLine = currentLine ? (currentLine + ' ' + word) : word;
+      const testW = ctx.measureText(testLine).width;
+      if (testW > maxTextW && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+
+    // 2. Measure actual max line width for tightly fitted bubble
+    let maxMeasuredW = 0;
+    lines.forEach(l => {
+      const lw = ctx.measureText(l).width;
+      if (lw > maxMeasuredW) maxMeasuredW = lw;
+    });
+
+    const paddingX = 14;
+    const paddingY = 8;
+    const lineHeight = 16;
+    const bubbleW = Math.max(80, maxMeasuredW + paddingX * 2);
+    const bubbleH = lines.length * lineHeight + paddingY * 2;
+
+    // 3. Safe canvas clamping: guarantee bubble is 100% inside screen bounds
+    const arenaW = CONFIG.width || 800;
+    const arenaH = CONFIG.height || 600;
+    const minX = 14;
+    const maxX = arenaW - bubbleW - 14;
+    const bx = Math.max(minX, Math.min(maxX, b.x - bubbleW / 2));
+    const by = Math.max(12, Math.min(arenaH - bubbleH - 12, b.y - 48 - bubbleH));
+
+    // 4. Speech bubble pointer tail directed toward Benny
+    const tailBaseX = Math.max(bx + 16, Math.min(bx + bubbleW - 16, b.x));
+    const tailApexX = b.x;
+    const tailApexY = Math.min(b.y - 30, by + bubbleH + 10);
+
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.96)';
     ctx.strokeStyle = b.isStaggered ? '#00f2fe' : '#ffd700';
     ctx.lineWidth = 1.5;
+    ctx.shadowColor = b.isStaggered ? 'rgba(0, 242, 254, 0.45)' : 'rgba(255, 215, 0, 0.35)';
+    ctx.shadowBlur = 8;
+
     ctx.beginPath();
     if (typeof ctx.roundRect === 'function') {
-      ctx.roundRect(bx, by, bubbleW, bubbleH, 6);
+      ctx.roundRect(bx, by, bubbleW, bubbleH, 7);
     } else {
       ctx.rect(bx, by, bubbleW, bubbleH);
     }
     ctx.fill();
     ctx.stroke();
 
+    // Draw pointer tail if bubble is above boss
+    if (by + bubbleH <= b.y - 20) {
+      ctx.beginPath();
+      ctx.moveTo(tailBaseX - 6, by + bubbleH);
+      ctx.lineTo(tailApexX, tailApexY);
+      ctx.lineTo(tailBaseX + 6, by + bubbleH);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // 5. Render wrapped text lines vertically centered
+    ctx.shadowBlur = 0;
     ctx.fillStyle = b.isStaggered ? '#00f2fe' : '#ffffff';
-    ctx.fillText(b.quipText, bx + 12, by + 19);
+    ctx.textAlign = 'left';
+    lines.forEach((line, lIdx) => {
+      const ly = by + paddingY + (lIdx + 0.5) * lineHeight;
+      ctx.fillText(line, bx + paddingX, ly);
+    });
+
     ctx.restore();
   }
 
@@ -9240,6 +9626,7 @@ window.updateBennieBossHud = updateBennieBossHud;
 // Bennie Prep Modal Event Listeners
 document.getElementById('btnCloseBenniePrepModal')?.addEventListener('click', closeBenniePrepModal);
 document.getElementById('btnCancelBenniePrep')?.addEventListener('click', closeBenniePrepModal);
+document.getElementById('btnClearBenniePrepLoadout')?.addEventListener('click', clearBenniePrepLoadout);
 document.getElementById('btnStartBennieBattle')?.addEventListener('click', () => {
   startBennieBossBattle(selectedBenniePath, Array.from(selectedBennieUpgrades));
 });
