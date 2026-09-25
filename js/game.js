@@ -114,7 +114,19 @@ function hasArtifact(id) {
     'toxic_catalyst': ['toxic_artillery', 'toxic_canisters', 'bio_residue', 'corrosive_coating'],
     'executioner_protocol': ['executioner_rounds', 'apex_calibrator', 'precision_impact'],
     'spring_loaded_bumper': ['inventor_spring_bumper'],
-    'inventor_spring_bumper': ['spring_loaded_bumper']
+    'inventor_spring_bumper': ['spring_loaded_bumper'],
+    'inventor_gear_launcher': ['gear_launcher'],
+    'gear_launcher': ['inventor_gear_launcher'],
+    'inventor_clockwork_dynamo': ['clockwork_dynamo', 'overclocked_dynamo', 'core_overclock'],
+    'clockwork_dynamo': ['inventor_clockwork_dynamo'],
+    'chaotic_gizmo_dispenser': ['gizmo_dispenser'],
+    'gizmo_dispenser': ['chaotic_gizmo_dispenser'],
+    'doomsday_contraption': ['bennie_masterpiece'],
+    'bennie_masterpiece': ['doomsday_contraption'],
+    'precision': ['critical'],
+    'critical': ['precision'],
+    'fast': ['velocity'],
+    'velocity': ['fast']
   };
 
   const aliases = ALIASES[id];
@@ -143,6 +155,8 @@ function recalculatePlayerStats() {
   if (hasArtifact('reinforced_hull')) archetypeHpBonus += 1;
   if (hasArtifact('iron_bastion')) archetypeHpBonus += 1;
   if (hasArtifact('titan_plating')) archetypeHpBonus += 1;
+  if (hasArtifact('fortress_core')) archetypeHpBonus += 2;
+  if (hasArtifact('aegis_rebounder')) archetypeHpBonus += 1;
   if (typeof isMarketModActive === 'function' && isMarketModActive('mod_titan_chassis')) {
     archetypeHpBonus += 2;
     if (typeof activeBuffs !== 'undefined') activeBuffs.shieldCharges = Math.max(activeBuffs.shieldCharges || 0, 1);
@@ -162,14 +176,26 @@ function recalculatePlayerStats() {
   let archetypeSpeedMult = 1.0;
   if (primaryPath === 'fast' || primaryPath === 'velocity') archetypeSpeedMult = 1.25;
   else if (primaryPath === 'juggernaut') archetypeSpeedMult = 0.85;
+  else if (primaryPath === 'overclock') archetypeSpeedMult = 1.20;
 
   let perkSpeedBonus = 1.0;
   if (hasArtifact('speed_demon')) perkSpeedBonus += 0.20;
   if (hasArtifact('turbo_servo')) perkSpeedBonus += 0.15;
   if (hasArtifact('hyper_servo')) perkSpeedBonus += 0.25;
+  if (hasArtifact('supercruise_matrix')) perkSpeedBonus += 0.20;
+  if (hasArtifact('chronos_accelerator')) perkSpeedBonus += 0.20;
+  if (hasArtifact('frictionless_core')) perkSpeedBonus += 0.15;
+  if (hasArtifact('plasma_overdrive')) perkSpeedBonus += 0.15;
+  if (hasArtifact('overclock_stabilizer')) perkSpeedBonus += 0.15;
+  if (hasArtifact('overclock_redline_booster') && player.hp === 1) perkSpeedBonus *= 1.35;
   if (hasArtifact('iron_hull')) perkSpeedBonus -= 0.10;
   if (typeof isMarketModActive === 'function' && isMarketModActive('mod_overclocked_servos')) perkSpeedBonus *= 1.30;
   if (typeof isMarketModActive === 'function' && isMarketModActive('mod_titan_chassis')) perkSpeedBonus *= 0.85;
+
+  // Artifact Amplifier: +20% bonus to positive stat buffs
+  if (hasArtifact('artifact_amplifier') && perkSpeedBonus > 1.0) {
+    perkSpeedBonus = 1.0 + (perkSpeedBonus - 1.0) * 1.20;
+  }
 
   const charSpeedMult = (activeChar && activeChar.speedMult) || (activeChar && activeChar.stats ? activeChar.stats.speed / 75 : 1.0) || 1.0;
   const charSmash = (activeChar && activeChar.smashBonus) || (activeChar && activeChar.stats ? activeChar.stats.power / 70 : 1.0) || 1.0;
@@ -177,11 +203,42 @@ function recalculatePlayerStats() {
 
   const metaSpeed = 1 + (typeof metaSave !== 'undefined' && metaSave.upgrades ? (metaSave.upgrades.meta_servos || 0) : 0) * 0.08;
   player.speedMult = metaSpeed * charSpeedMult * archetypeSpeedMult * perkSpeedBonus;
-  player.smashBonus = charSmash * (primaryPath === 'fast' ? 1.2 : 1.0);
+
+  // Smash bonus calculation: include velocity, kinetic, and inventor
+  let pathSmashMult = 1.0;
+  if (primaryPath === 'fast' || primaryPath === 'velocity') pathSmashMult = 1.20;
+  else if (primaryPath === 'kinetic') pathSmashMult = 1.30;
+  else if (primaryPath === 'inventor') pathSmashMult = 1.15;
+  if (hasArtifact('heavy_strike')) pathSmashMult += 0.15;
+  if (hasArtifact('kinetic_burst')) pathSmashMult += 0.20;
+  if (hasArtifact('plasma_overdrive')) pathSmashMult += 0.10;
+  if (hasArtifact('neutron_core')) pathSmashMult += 0.25;
+  if (hasArtifact('crimson_pact')) {
+    pathSmashMult += 0.50;
+    player.maxHp = Math.max(2, (player.maxHp || 4) - 1);
+  }
+  player.smashBonus = charSmash * pathSmashMult;
+
+  // Ability cooldown reduction
+  let abilityCdMult = 1.0;
+  if (primaryPath === 'inventor') abilityCdMult *= 0.85;
+  if (primaryPath === 'overclock') abilityCdMult *= 0.75;
+  if (hasArtifact('core_overclock')) abilityCdMult *= 0.70;
+  if (hasArtifact('inventor_clockwork_dynamo')) abilityCdMult *= 0.65;
+  if (hasArtifact('overclocked_dynamo')) abilityCdMult *= 0.75;
+  if (hasArtifact('cascade_capacitor')) abilityCdMult *= 0.80;
+  if (hasArtifact('overclock_heat_sink_bypass')) abilityCdMult *= 0.75;
+  if (hasArtifact('zero_point_capacitor')) abilityCdMult *= 0.65;
+  if (hasArtifact('supercondensor_cell')) abilityCdMult *= 0.75;
+  player.abilityCdMult = abilityCdMult;
+
   player.burnChance = (activeChar && activeChar.burnChance) || 0;
   player.isVoid = !!(activeChar && activeChar.isVoid);
   player.isChrono = !!(activeChar && activeChar.isChrono);
-  player.droneCommander = !!(activeChar && activeChar.droneCommander);
+  player.droneCommander = !!(activeChar && activeChar.droneCommander) || primaryPath === 'drone';
+  player.sentinelOverdrive = hasArtifact('sentinel_overdrive');
+  player.ballisticCompensator = hasArtifact('ballistic_compensator');
+  player.biohazardImmune = hasArtifact('biohazard_containment');
   player.glitchArchitect = !!(activeChar && activeChar.glitchArchitect);
 
   let baseH = CONFIG.basePaddleH * charSizeMult;
@@ -191,6 +248,8 @@ function recalculatePlayerStats() {
   if (hasArtifact('iron_bastion')) baseH *= 1.15;
   if (hasArtifact('aegis_bulwark')) baseH *= 1.20;
   if (hasArtifact('bismuth_alloy')) baseH *= 1.10;
+  if (hasArtifact('fortress_core')) baseH *= 1.20;
+  if (hasArtifact('nanite_reconstructor')) baseH *= 1.15;
   if (hasArtifact('hyper_servo')) baseH *= 0.95;
   if (typeof isMarketModActive === 'function' && isMarketModActive('mod_overclocked_servos')) baseH *= 0.85;
   player.h = (!isNaN(baseH) && baseH > 0) ? baseH : CONFIG.basePaddleH;
@@ -834,6 +893,16 @@ let lasers = [];
 let enemyBullets = [];
 let shockwaves = [];
 let lightningArcs = [];
+let playerBumpers = [];
+window.playerBumpers = playerBumpers;
+let playerGears = [];
+window.playerGears = playerGears;
+let playerHomingWrenches = [];
+window.playerHomingWrenches = playerHomingWrenches;
+let playerMasterpiece = null;
+window.playerMasterpiece = playerMasterpiece;
+let playerMiasmaClouds = [];
+window.playerMiasmaClouds = playerMiasmaClouds;
 
 // Background animation variables
 let gridPerspectiveZ = 0;
@@ -1724,12 +1793,16 @@ function triggerGravityAnchor() {
 }
 
 function getFloorMinSpeed() {
+  let minS = 4.8;
   if (roomType === 'BREAKOUT' || roomType === 'SWARM' || roomType === 'MELTDOWN') {
-    if (currentFloor <= 5) return 4.8;
-    if (currentFloor <= 15) return 5.6;
-    return 6.2;
+    if (currentFloor <= 5) minS = 4.8;
+    else if (currentFloor <= 15) minS = 5.6;
+    else minS = 6.2;
+  } else {
+    minS = currentFloor <= 5 ? 6.2 : 7.6;
   }
-  return currentFloor <= 5 ? 6.2 : 7.6;
+  if (hasArtifact('kinetic_flywheel')) minS *= 1.20;
+  return minS;
 }
 
 function getFloorMaxSpeed() {
@@ -1844,6 +1917,144 @@ function processDamageQueue() {
         // Artillery Flak Barrage
         if (hasArtifact('artillery_flak_barrage')) {
           enemyBullets = enemyBullets.filter(eb => Math.hypot(eb.x - br.x, eb.y - br.y) > 100);
+        }
+
+        // Shrapnel Matrix: Destructions splinter into 3 kinetic ricochet pellets
+        if (hasArtifact('shrapnel_matrix')) {
+          for (let s = 0; s < 3; s++) {
+            const ang = Math.random() * Math.PI * 2;
+            lasers.push({
+              x: br.x + br.w / 2,
+              y: br.y + br.h / 2,
+              vx: Math.cos(ang) * 14,
+              vy: Math.sin(ang) * 14,
+              w: 7,
+              h: 7,
+              color: '#f59e0b',
+              fromPlayer: true,
+              damage: 1
+            });
+          }
+          addFloatingText('💥 SHRAPNEL MATRIX!', br.x, br.y, '#f59e0b');
+        }
+
+        // Magma Conflagration: Burning targets detonate on destruction
+        if (hasArtifact('magma_conflagration') && br.burning) {
+          shockwaves.push({ x: br.x + br.w / 2, y: br.y + br.h / 2, radius: 10, maxRadius: 85, color: '#ff5500', alpha: 0.9 });
+          bricks.filter(b => b.id !== br.id && b.hp > 0 && Math.hypot(b.x - br.x, b.y - br.y) < 95).forEach(b => {
+            b.burning = true;
+            b.hp = Math.max(0, b.hp - 2);
+          });
+          addFloatingText('🔥 MAGMA CONFLAGRATION!', br.x, br.y, '#ff5500');
+        }
+
+        // Orbital Strike Relay: Clearing elite node triggers orbital kinetic strike
+        if (hasArtifact('orbital_strike_relay') && (br.isElite || br.type === 'titanium' || br.type === 'generator')) {
+          const highTarget = bricks.filter(b => b.id !== br.id && b.hp > 0).sort((a, b) => b.hp - a.hp)[0];
+          if (highTarget) {
+            highTarget.hp = Math.max(0, highTarget.hp - 6);
+            shockwaves.push({ x: highTarget.x + highTarget.w / 2, y: highTarget.y + highTarget.h / 2, radius: 15, maxRadius: 110, color: '#ffd700', alpha: 0.95 });
+            addFloatingText('⚡ ORBITAL KINETIC STRIKE (-6)!', highTarget.x, highTarget.y, '#ffd700');
+          }
+        }
+
+        // Reaper Protocol: Restores shields & grants frenzy on node clear
+        if (hasArtifact('reaper_protocol')) {
+          player.reaperKills = (player.reaperKills || 0) + 1;
+          if (player.reaperKills % 6 === 0) {
+            activeBuffs.shieldCharges = Math.min(4, (activeBuffs.shieldCharges || 0) + 1);
+            addFloatingText('🛡️ REAPER SHIELD (+1)!', player.x + 35, player.y - 15, '#00b0ff');
+          }
+          player.frenzyTimer = 60;
+        }
+
+        // Void Siphon: Boss / Elite nodes yield double chips and barrier
+        if (hasArtifact('void_siphon') && (br.isElite || br.type === 'titanium' || br.type === 'generator')) {
+          runDataChips += 6;
+          activeBuffs.shieldCharges = Math.min(4, (activeBuffs.shieldCharges || 0) + 1);
+          addFloatingText('🌀 VOID SIPHON (+6 CHIPS & SHIELD)!', br.x, br.y, '#8b5cf6');
+        }
+
+        // Plague Winter: Shattered frozen targets explode into toxic corrosive clouds
+        if (hasArtifact('plague_winter') && br.frozen) {
+          playerMiasmaClouds.push({
+            x: br.x + br.w / 2,
+            y: br.y + br.h / 2,
+            radius: 55,
+            life: 240,
+            pulse: 0
+          });
+          bricks.filter(b => b.id !== br.id && b.hp > 0 && Math.hypot(b.x - br.x, b.y - br.y) < 70).forEach(b => {
+            b.infected = true;
+          });
+          addFloatingText('❄️☣️ PLAGUE WINTER!', br.x, br.y, '#10b981');
+        }
+
+        // Inventor Chaotic Gizmo Dispenser (Path 25 Upgrade)
+        if (hasArtifact('chaotic_gizmo_dispenser') && (br.isElite || br.type === 'titanium' || br.type === 'generator' || Math.random() < 0.15)) {
+          const gRoll = Math.random();
+          if (gRoll < 0.35) {
+            playerBumpers.push({ x: br.x, y: br.y, radius: 22, life: 420, pulse: 0, color: '#ffd700' });
+            addFloatingText('💡 GIZMO: SPRING TRAP!', br.x, br.y, '#ffd700');
+          } else if (gRoll < 0.70) {
+            shockwaves.push({ x: br.x, y: br.y, radius: 5, maxRadius: 130, color: '#00b0ff', alpha: 0.85 });
+            bricks.filter(b => b.id !== br.id && b.hp > 0).slice(0, 3).forEach(b => { b.hp = Math.max(0, b.hp - 2); });
+            addFloatingText('⚙️ GIZMO: SPARK COIL!', br.x, br.y, '#00b0ff');
+          } else {
+            activeBuffs.magnet = Math.max(activeBuffs.magnet || 0, 8);
+            addFloatingText('🧲 GIZMO: MINI-MAGNET!', br.x, br.y, '#00e676');
+          }
+        }
+
+        // Salvage Matrix: Elite / Special kills drop Shield Shard
+        if (hasArtifact('salvage_matrix') && (br.isElite || br.type === 'generator') && Math.random() < 0.40) {
+          activeBuffs.shieldCharges = Math.min(4, (activeBuffs.shieldCharges || 0) + 1);
+          addFloatingText('🛡️ SALVAGE SHIELD!', br.x, br.y, '#00b0ff');
+        }
+
+        // Credit Synthesizer & Nanite Recycler: Bonus chips
+        if (hasArtifact('credit_synthesizer') || hasArtifact('nanite_recycler')) {
+          if (Math.random() < 0.35) {
+            runDataChips += 1;
+          }
+        }
+
+        // Nanite Swarm Replication (Nanite Path & Upgrades)
+        if (primaryPath === 'nanite' || hasArtifact('nanite_harvest_matrix') || hasArtifact('replication_swarm') || hasArtifact('plague_hive_nanites')) {
+          const nearbyBr = bricks.filter(b => b.id !== br.id && b.hp > 0 && Math.hypot(b.x - br.x, b.y - br.y) < 75);
+          nearbyBr.slice(0, 2).forEach(nb => {
+            nb.hp = Math.max(0, nb.hp - 2);
+            spawnParticles(nb.x, nb.y, '#38bdf8', 6);
+          });
+        }
+
+        // Plague / Toxic Necrotic Detonation & Miasma Clouds
+        if (primaryPath === 'plague' || hasArtifact('necrotic_detonation') || hasArtifact('plague_rot_infestation') || hasArtifact('plague_epidemic_burst')) {
+          playerMiasmaClouds.push({
+            x: br.x + br.w / 2,
+            y: br.y + br.h / 2,
+            radius: 18,
+            maxRadius: 36,
+            life: 200
+          });
+          spawnParticles(br.x, br.y, '#10b981', 8);
+        }
+
+        // Electro Arc Discharge & EMP Burst
+        if (hasArtifact('arc_discharge') || hasArtifact('emp_burst')) {
+          const sparkTargets = bricks.filter(b => b.id !== br.id && b.hp > 0 && Math.hypot(b.x - br.x, b.y - br.y) < 90);
+          sparkTargets.slice(0, 2).forEach(st => {
+            st.hp = Math.max(0, st.hp - 2);
+            lightningArcs.push({ x1: br.x + br.w / 2, y1: br.y + br.h / 2, x2: st.x + st.w / 2, y2: st.y + st.h / 2, life: 8 });
+          });
+        }
+
+        // Resonance Harmonic Cataclysm
+        if (hasArtifact('harmonic_cataclysm') || hasArtifact('resonance_harmonic_amplifier')) {
+          bricks.filter(b => b.id !== br.id && b.type === br.type && b.hp > 0).slice(0, 2).forEach(hb => {
+            hb.hp = Math.max(0, hb.hp - 2);
+            spawnParticles(hb.x, hb.y, '#ec4899', 6);
+          });
         }
       }
     }
@@ -2065,6 +2276,11 @@ function generateRoom(floor) {
   floatingTexts = [];
   shockwaves = [];
   lightningArcs = [];
+  playerBumpers = [];
+  playerGears = [];
+  playerHomingWrenches = [];
+  playerMasterpiece = null;
+  playerMiasmaClouds = [];
   duelRallyCount = 0;
   isHyperSpike = false;
   timeScale = 1.0;
@@ -2658,6 +2874,54 @@ function updateGame(dt) {
       }
     }
 
+    // EMP Fleet (Combat Drones periodically discharge chain EMP pulses)
+    if (hasArtifact('emp_fleet') && hasSentry) {
+      player.empFleetTick = (player.empFleetTick || 0) + 1;
+      if (player.empFleetTick >= 150) {
+        player.empFleetTick = 0;
+        const drX = player.x + player.w / 2 + Math.cos(sentryAngle) * 46;
+        const drY = player.y + player.h / 2 + Math.sin(sentryAngle) * 46;
+        shockwaves.push({ x: drX, y: drY, radius: 10, maxRadius: 130, color: '#00f2fe', alpha: 0.85 });
+        if (ai && ai.active) ai.stunTimer = Math.max(ai.stunTimer || 0, 90);
+        bricks.filter(br => Math.hypot(br.x - drX, br.y - drY) < 140).slice(0, 3).forEach(br => queueBrickDamage(br.id, 2));
+        addFloatingText('⚡ EMP FLEET PULSE!', drX, drY, '#00f2fe');
+      }
+    }
+
+    // Aegis Battery (Shield charges periodically discharge arc lightning)
+    if (hasArtifact('aegis_battery') && activeBuffs.shieldCharges > 0) {
+      player.aegisBatteryTick = (player.aegisBatteryTick || 0) + 1;
+      if (player.aegisBatteryTick >= 180) {
+        player.aegisBatteryTick = 0;
+        const targetBr = bricks.filter(b => b.hp > 0).sort((a, b) => Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y))[0];
+        if (targetBr) {
+          queueBrickDamage(targetBr.id, 2);
+          lightningArcs.push({
+            x1: player.x + player.w,
+            y1: player.y + player.h / 2,
+            x2: targetBr.x + targetBr.w / 2,
+            y2: targetBr.y + targetBr.h / 2,
+            life: 10
+          });
+          addFloatingText('⚡ AEGIS BATTERY DISCHARGE!', player.x + 35, player.y - 15, '#00f2fe');
+        }
+      }
+    }
+
+    // Singularity Capacitor (Gathers energy, releasing mini black hole)
+    if (hasArtifact('singularity_capacitor')) {
+      player.singularityCapTick = (player.singularityCapTick || 0) + 1;
+      if (player.singularityCapTick >= 360) {
+        player.singularityCapTick = 0;
+        shockwaves.push({ x: CONFIG.width / 2 + 50, y: CONFIG.height / 2, radius: 20, maxRadius: 180, color: '#8b5cf6', alpha: 0.9 });
+        enemyBullets.forEach(eb => {
+          eb.vx = (CONFIG.width / 2 + 50 - eb.x) * 0.12;
+          eb.vy = (CONFIG.height / 2 - eb.y) * 0.12;
+        });
+        addFloatingText('🌀 SINGULARITY COLLAPSE!', CONFIG.width / 2, CONFIG.height / 2, '#8b5cf6');
+      }
+    }
+
     if (hasArtifact('overcharge_capacitor')) {
       overchargeAirTime += 1;
     }
@@ -2750,6 +3014,14 @@ function updateGame(dt) {
         continue;
       }
 
+      // Tactical Nanoswarm (Escort micro-drones intercept bullets)
+      if (hasArtifact('tactical_nanoswarm') && Math.hypot(eb.x - player.x, eb.y - (player.y + player.h / 2)) < 85) {
+        spawnParticles(eb.x, eb.y, '#38bdf8', 6);
+        enemyBullets.splice(i, 1);
+        addFloatingText('🛡️ NANOSWARM INTERCEPT!', player.x + 35, player.y - 10, '#38bdf8');
+        continue;
+      }
+
       eb.x += eb.vx * timeScale;
       if (eb.vy) eb.y += eb.vy * timeScale;
 
@@ -2772,6 +3044,17 @@ function updateGame(dt) {
           spawnParticles(eb.x, eb.y, '#00f2fe', 6);
           addFloatingText('DEFLECTED!', player.x + 35, player.y, '#00f2fe');
           enemyBullets.splice(i, 1);
+          continue;
+        }
+
+        // Polarity Inverter: converts incoming bullets into friendly projectiles
+        if (hasArtifact('polarity_inverter')) {
+          eb.vx = Math.abs(eb.vx || 6) * 1.4;
+          eb.vy = (Math.random() - 0.5) * 6;
+          eb.fromPlayer = true;
+          eb.color = '#00f2fe';
+          spawnParticles(eb.x, eb.y, '#00f2fe', 8);
+          addFloatingText('🧲 POLARITY INVERTED!', player.x + 35, player.y, '#00f2fe');
           continue;
         }
 
@@ -3069,6 +3352,20 @@ function updateGame(dt) {
               addFloatingText('PRISM SPLIT!', br.x, br.y - 12, '#00b0ff');
             }
 
+            // Ion Diffuser: Laser strikes branch to 2 secondary targets dealing 50% damage
+            if (hasArtifact('ion_diffuser') && !l.hasDiffused) {
+              l.hasDiffused = true;
+              lasers.push({ x: br.x + br.w + 2, y: br.y - 12, vx: 14, vy: -4, w: 8, h: 3, color: '#00f2fe', fromPlayer: true, damage: Math.max(1, Math.round((l.damage || 2) * 0.5)), hasDiffused: true });
+              lasers.push({ x: br.x + br.w + 2, y: br.y + br.h + 12, vx: 14, vy: 4, w: 8, h: 3, color: '#00f2fe', fromPlayer: true, damage: Math.max(1, Math.round((l.damage || 2) * 0.5)), hasDiffused: true });
+              addFloatingText('⚡ ION DIFFUSER!', br.x, br.y, '#00f2fe');
+            }
+
+            // Plasma Conduit: Energy beams pierce through the first 2 enemies struck without losing momentum
+            if (hasArtifact('plasma_conduit')) {
+              l.plasmaPierces = (l.plasmaPierces || 0) + 1;
+              if (l.plasmaPierces <= 2) l.piercing = true;
+            }
+
             if (!l.piercing) lasers.splice(i, 1);
             break;
           }
@@ -3121,15 +3418,285 @@ function updateGame(dt) {
       if (pb.life <= 0 || pb.x < 0 || pb.x > CONFIG.width) phantomBalls.splice(i, 1);
     }
 
+    // ========================================================================
+    // PLAYER CONTRAPTIONS & PATH RUNTIME ENGINE (Inventor, Chrono, Magnetic)
+    // ========================================================================
+
+    // 1. Player Spring Bumpers (Inventor Path & Upgrades)
+    for (let i = playerBumpers.length - 1; i >= 0; i--) {
+      const bmp = playerBumpers[i];
+      bmp.life--;
+      bmp.pulse = (bmp.pulse || 0) + 0.06;
+      if (bmp.life <= 0) {
+        playerBumpers.splice(i, 1);
+        continue;
+      }
+      balls.forEach(ball => {
+        const dist = Math.hypot(ball.x - bmp.x, ball.y - bmp.y);
+        if (dist < ball.radius + bmp.radius) {
+          const nx = Math.abs((ball.x - bmp.x) / dist) || 1;
+          const ny = (ball.y - bmp.y) / dist;
+          ball.vx = nx * Math.max(8, Math.abs(ball.vx) * 1.4);
+          ball.vy = (ny || (Math.random() - 0.5)) * Math.max(4, Math.abs(ball.vy) * 1.3);
+          spawnParticles(bmp.x, bmp.y, '#ffd700', 10);
+          if (window.audio && typeof window.audio.wallBounce === 'function') window.audio.wallBounce();
+          addFloatingText('💡 SPRING REBOUND x1.4!', bmp.x - 30, bmp.y - 12, '#ffd700');
+
+          // Perpetual Motion Engine / Spring-Loaded Slam Fusion: Kinetic Shockwave
+          if (hasArtifact('perpetual_motion_engine') || hasArtifact('spring_loaded_slam') || primaryPath === 'kinetic') {
+            shockwaves.push({ x: bmp.x, y: bmp.y, radius: 10, maxRadius: 160, color: '#ffd700', alpha: 0.85 });
+            screenShake = 6;
+            bricks.forEach(br => {
+              if (Math.hypot(br.x - bmp.x, br.y - bmp.y) < 160) queueBrickDamage(br.id, 3);
+            });
+            if (bennieBoss && !bennieBoss.isDefeated && Math.hypot(bennieBoss.x - bmp.x, bennieBoss.y - bmp.y) < 180) {
+              damageBennie(4, 'spring_slam');
+            }
+          }
+        }
+      });
+    }
+
+    // 2. Player Prototype Gears (Inventor Path & Upgrades)
+    for (let i = playerGears.length - 1; i >= 0; i--) {
+      const g = playerGears[i];
+      g.life--;
+      g.angle = (g.angle || 0) + 0.18;
+      g.x += g.vx * timeScale;
+      g.y += g.vy * timeScale;
+
+      // Wall bounce top/bottom
+      if (g.y - g.radius <= 0 || g.y + g.radius >= CONFIG.height) {
+        g.vy = -g.vy;
+        g.bounces = (g.bounces || 0) + 1;
+        if (hasArtifact('perpetual_motion_engine')) {
+          g.vx *= 1.1;
+          g.vy *= 1.1;
+          g.damage = Math.round((g.damage || 3) * 1.1);
+          spawnParticles(g.x, g.y, '#ffd700', 4);
+        }
+      }
+
+      // Wall bounce right (Perpetual Motion Engine)
+      if (hasArtifact('perpetual_motion_engine') && g.x + g.radius >= CONFIG.width) {
+        g.vx = -Math.abs(g.vx);
+        g.bounces = (g.bounces || 0) + 1;
+        g.damage = Math.round((g.damage || 3) * 1.1);
+        spawnParticles(g.x, g.y, '#ffd700', 6);
+      }
+
+      // Hit Bennie Boss
+      if (bennieBoss && !bennieBoss.isDefeated && (currentAppScreen === 'BENNIE_BOSS' || roomType === 'BENNIE_ARENA')) {
+        const b = bennieBoss;
+        if (Math.hypot(g.x - b.x, g.y - b.y) < g.radius + (b.radius || 40)) {
+          damageBennie(g.damage || 3, 'player_gear');
+          spawnParticles(g.x, g.y, '#ffd700', 10);
+          if (hasArtifact('inventor_clockwork_dynamo')) {
+            player.dashCooldown = Math.max(0, (player.dashCooldown || 0) - 90);
+          }
+          if (!hasArtifact('perpetual_motion_engine') || g.bounces > 5) {
+            playerGears.splice(i, 1);
+            continue;
+          }
+        }
+      }
+
+      // Hit AI paddle
+      if (ai.active && currentAppScreen !== 'BENNIE_BOSS' && roomType !== 'BENNIE_ARENA' &&
+          g.x >= ai.x && g.x <= ai.x + ai.w && g.y >= ai.y && g.y <= ai.y + ai.h) {
+        ai.hp = Math.max(0, ai.hp - (g.damage || 2));
+        ai.stunTimer = 45;
+        spawnParticles(g.x, g.y, '#ffd700', 8);
+        if (hasArtifact('inventor_clockwork_dynamo')) player.dashCooldown = Math.max(0, (player.dashCooldown || 0) - 90);
+        if (!hasArtifact('perpetual_motion_engine') || g.bounces > 5) {
+          playerGears.splice(i, 1);
+          continue;
+        }
+      }
+
+      // Hit Bricks
+      let hitBrick = false;
+      for (let bIdx = 0; bIdx < bricks.length; bIdx++) {
+        const br = bricks[bIdx];
+        if (g.x >= br.x && g.x <= br.x + br.w && g.y >= br.y && g.y <= br.y + br.h) {
+          queueBrickDamage(br.id, g.damage || 3);
+          spawnParticles(g.x, g.y, '#ffd700', 8);
+          hitBrick = true;
+          if (hasArtifact('inventor_clockwork_dynamo')) player.dashCooldown = Math.max(0, (player.dashCooldown || 0) - 90);
+          break;
+        }
+      }
+      if (hitBrick && (!hasArtifact('perpetual_motion_engine') || g.bounces > 5)) {
+        playerGears.splice(i, 1);
+        continue;
+      }
+
+      if (g.life <= 0 || g.x < -40 || g.x > CONFIG.width + 40) {
+        playerGears.splice(i, 1);
+      }
+    }
+
+    // 3. Player Homing Wrenches (Inventor Upgrades)
+    for (let i = playerHomingWrenches.length - 1; i >= 0; i--) {
+      const w = playerHomingWrenches[i];
+      w.life--;
+      w.angle = (w.angle || 0) + 0.22;
+
+      let targetX = CONFIG.width - 50, targetY = CONFIG.height / 2;
+      if (bennieBoss && !bennieBoss.isDefeated) {
+        targetX = bennieBoss.x;
+        targetY = bennieBoss.y;
+      } else if (ai.active && (roomType === 'BOSS' || roomType === 'MINI_BOSS' || roomType === 'DUEL')) {
+        targetX = ai.x + ai.w / 2;
+        targetY = ai.y + ai.h / 2;
+      } else if (bricks.length > 0) {
+        const nearestBr = bricks[0];
+        targetX = nearestBr.x + nearestBr.w / 2;
+        targetY = nearestBr.y + nearestBr.h / 2;
+      }
+
+      const dx = targetX - w.x;
+      const dy = targetY - w.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      w.vx += (dx / dist) * 0.7;
+      w.vy += (dy / dist) * 0.7;
+      const spd = Math.hypot(w.vx, w.vy);
+      if (spd > 12) {
+        w.vx = (w.vx / spd) * 12;
+        w.vy = (w.vy / spd) * 12;
+      }
+      w.x += w.vx * timeScale;
+      w.y += w.vy * timeScale;
+
+      if (bennieBoss && !bennieBoss.isDefeated && Math.hypot(w.x - bennieBoss.x, w.y - bennieBoss.y) < 35) {
+        damageBennie(w.damage || 4, 'wrench');
+        spawnParticles(w.x, w.y, '#ffd700', 12);
+        addFloatingText('🔧 WRENCH STUN (1.0s)!', bennieBoss.x - 30, bennieBoss.y, '#ffd700');
+        playerHomingWrenches.splice(i, 1);
+        continue;
+      }
+      if (ai.active && w.x >= ai.x && w.x <= ai.x + ai.w && w.y >= ai.y && w.y <= ai.y + ai.h) {
+        ai.hp = Math.max(0, ai.hp - (w.damage || 4));
+        ai.stunTimer = 60;
+        spawnParticles(w.x, w.y, '#ffd700', 12);
+        addFloatingText('🔧 WRENCH STUN (1.0s)!', ai.x - 30, ai.y, '#ffd700');
+        playerHomingWrenches.splice(i, 1);
+        continue;
+      }
+      let wrenchHit = false;
+      for (let bIdx = 0; bIdx < bricks.length; bIdx++) {
+        const br = bricks[bIdx];
+        if (w.x >= br.x && w.x <= br.x + br.w && w.y >= br.y && w.y <= br.y + br.h) {
+          queueBrickDamage(br.id, w.damage || 4);
+          spawnParticles(w.x, w.y, '#ffd700', 10);
+          wrenchHit = true;
+          break;
+        }
+      }
+      if (wrenchHit || w.life <= 0 || w.x < 0 || w.x > CONFIG.width) {
+        playerHomingWrenches.splice(i, 1);
+      }
+    }
+
+    // 4. Player Masterpiece Prototype Bot (Doomsday Contraption)
+    if (playerMasterpiece) {
+      const pm = playerMasterpiece;
+      pm.life--;
+      pm.pulse = (pm.pulse || 0) + 0.05;
+      pm.x += pm.vx;
+      if (pm.x <= 80 || pm.x >= CONFIG.width - 80) pm.vx = -pm.vx;
+
+      pm.shootTimer = (pm.shootTimer || 0) + 1;
+      if (pm.shootTimer >= 40) {
+        pm.shootTimer = 0;
+        lasers.push({ x: pm.x - 10, y: pm.y + 12, vx: 14, vy: 0.5, w: 16, h: 5, color: '#ffd700', fromPlayer: true, damage: 3 });
+        lasers.push({ x: pm.x + 10, y: pm.y + 12, vx: 14, vy: -0.5, w: 16, h: 5, color: '#ffd700', fromPlayer: true, damage: 3 });
+        if (window.audio && typeof window.audio.laserShoot === 'function') window.audio.laserShoot();
+      }
+
+      pm.bombTimer = (pm.bombTimer || 0) + 1;
+      if (pm.bombTimer >= 110) {
+        pm.bombTimer = 0;
+        playerGears.push({
+          x: pm.x,
+          y: pm.y + 20,
+          vx: pm.vx * 1.5,
+          vy: 4.5,
+          radius: 14,
+          angle: 0,
+          life: 280,
+          bounces: 0,
+          damage: 5,
+          color: '#ff2a6d'
+        });
+        spawnParticles(pm.x, pm.y + 20, '#ff2a6d', 8);
+      }
+
+      if (pm.life <= 0) {
+        spawnParticles(pm.x, pm.y, '#ffd700', 25);
+        playerMasterpiece = null;
+      }
+    }
+
+    // 5. Player Toxic Miasma Clouds (Plague Path & Upgrades)
+    for (let i = playerMiasmaClouds.length - 1; i >= 0; i--) {
+      const mc = playerMiasmaClouds[i];
+      mc.life--;
+      mc.radius = Math.min(mc.maxRadius || 36, mc.radius + 0.15);
+      if (mc.life % 25 === 0) {
+        // DoT damage
+        if (ai.active && Math.hypot(ai.x - mc.x, ai.y - mc.y) < mc.radius + 30) {
+          ai.hp = Math.max(0, ai.hp - 1);
+          spawnParticles(mc.x, mc.y, '#00e676', 4);
+        }
+        if (bennieBoss && !bennieBoss.isDefeated && Math.hypot(bennieBoss.x - mc.x, bennieBoss.y - mc.y) < mc.radius + 40) {
+          damageBennie(1, 'miasma');
+        }
+        bricks.forEach(br => {
+          if (Math.hypot(br.x - mc.x, br.y - mc.y) < mc.radius + 20) queueBrickDamage(br.id, 1);
+        });
+      }
+      if (mc.life <= 0) playerMiasmaClouds.splice(i, 1);
+    }
+
+    // 6. Chrono Time Dilation Field
+    if (primaryPath === 'chrono' || hasArtifact('chrono_time_dilation_field') || hasArtifact('temporal_buffer')) {
+      balls.forEach(ball => {
+        if (ball.vx < 0 && ball.x < player.x + 95 && ball.x > player.x - 20) {
+          ball.vx *= 0.94;
+          ball.vy *= 0.94;
+        }
+      });
+      enemyBullets.forEach(eb => {
+        if (eb.vx < 0 && eb.x < player.x + 95 && eb.x > player.x - 20) {
+          eb.vx *= 0.92;
+        }
+      });
+    }
+
+    // 7. Magnetic Flux Steering
+    if (primaryPath === 'magnetic' || hasArtifact('magnetic_polar_attractor') || hasArtifact('remote_flux')) {
+      if (player.vy && Math.abs(player.vy) > 0.5) {
+        balls.forEach(ball => {
+          const dy = (player.y + player.h / 2) - ball.y;
+          ball.vy += Math.sign(dy) * 0.18 * timeScale;
+        });
+      }
+    }
+
     // Drops & Coins
     for (let i = powerupDrops.length - 1; i >= 0; i--) {
       const p = powerupDrops[i];
-      if (activeBuffs.magnet > 0) {
+      const hasMagnet = activeBuffs.magnet > 0 || hasArtifact('magnet_shard') || hasArtifact('vortex_core');
+      if (hasMagnet) {
         const dx = (player.x + player.w / 2) - p.x;
         const dy = (player.y + player.h / 2) - p.y;
         const dist = Math.hypot(dx, dy) || 1;
-        p.vx += (dx / dist) * 0.45;
-        p.y += (dy / dist) * 2.8 * timeScale;
+        const pullDist = hasArtifact('vortex_core') ? 260 : 180;
+        if (dist < pullDist || activeBuffs.magnet > 0 || hasArtifact('magnet_shard')) {
+          p.vx += (dx / dist) * (hasArtifact('vortex_core') ? 0.75 : 0.45);
+          p.y += (dy / dist) * 2.8 * timeScale;
+        }
       }
       p.x += p.vx * timeScale;
       if (p.x <= player.x + player.w && p.x + p.w >= player.x &&
@@ -3145,12 +3712,16 @@ function updateGame(dt) {
 
     for (let i = coinDrops.length - 1; i >= 0; i--) {
       const c = coinDrops[i];
-      if (activeBuffs.magnet > 0) {
+      const hasMagnet = activeBuffs.magnet > 0 || hasArtifact('magnet_shard') || hasArtifact('vortex_core');
+      if (hasMagnet) {
         const dx = (player.x + player.w / 2) - c.x;
         const dy = (player.y + player.h / 2) - c.y;
         const dist = Math.hypot(dx, dy) || 1;
-        c.vx += (dx / dist) * 0.6;
-        c.vy += (dy / dist) * 2.8 * timeScale;
+        const pullDist = hasArtifact('vortex_core') ? 260 : 180;
+        if (dist < pullDist || activeBuffs.magnet > 0 || hasArtifact('magnet_shard')) {
+          c.vx += (dx / dist) * (hasArtifact('vortex_core') ? 0.9 : 0.6);
+          c.vy += (dy / dist) * 2.8 * timeScale;
+        }
       }
       c.x += c.vx * timeScale;
       c.y += c.vy * timeScale;
@@ -3192,11 +3763,37 @@ function updateGame(dt) {
         b.vy = Math.abs(b.vy);
         overchargeAirTime = Math.max(0, overchargeAirTime - 30);
         if (window.audio) window.audio.wallBounce();
+        triggerWallBouncePerks(b);
       } else if (b.y + b.radius >= CONFIG.height) {
         b.y = CONFIG.height - b.radius - 1;
         b.vy = -Math.abs(b.vy);
         overchargeAirTime = Math.max(0, overchargeAirTime - 30);
         if (window.audio) window.audio.wallBounce();
+        triggerWallBouncePerks(b);
+      }
+
+      // Temporal Echo (Top rim ghostly mirror paddle deflects balls)
+      if (hasArtifact('temporal_echo') && b.vy < 0 && b.y - b.radius <= 24) {
+        const mirrorPaddleX = 100 + (player.y / CONFIG.height) * (CONFIG.width - 200);
+        if (Math.abs(b.x - mirrorPaddleX) < 55) {
+          b.y = 26 + b.radius;
+          b.vy = Math.abs(b.vy) * 1.15;
+          if (window.audio) window.audio.paddleHit(true);
+          spawnParticles(b.x, b.y, '#c084fc', 10);
+          addFloatingText('⚛️ TEMPORAL ECHO DEFLECTION!', b.x, b.y + 15, '#c084fc');
+        }
+      }
+
+      // Napalm Wake & Pyro Scorch Mark (Thermal trail burns enemy projectiles)
+      if (hasArtifact('napalm_wake') || hasArtifact('pyro_scorch_mark')) {
+        for (let ebIdx = enemyBullets.length - 1; ebIdx >= 0; ebIdx--) {
+          const eb = enemyBullets[ebIdx];
+          if (Math.hypot(eb.x - b.x, eb.y - b.y) < 42) {
+            spawnParticles(eb.x, eb.y, '#ff5500', 6);
+            enemyBullets.splice(ebIdx, 1);
+            addFloatingText('🔥 NAPALM BURN!', b.x, b.y, '#ff5500');
+          }
+        }
       }
 
       if (hasArtifact('gravity_well_inverter') && b.vx < 0 && b.x < 110 && b.x > player.x + player.w) {
@@ -3263,6 +3860,7 @@ function updateGame(dt) {
         b.vx = -Math.abs(b.vx);
         overchargeAirTime = Math.max(0, overchargeAirTime - 30);
         if (window.audio) window.audio.wallBounce();
+        triggerWallBouncePerks(b);
       }
 
       if (ai.active && currentAppScreen !== 'BENNIE_BOSS' && roomType !== 'BENNIE_ARENA' && b.x - b.radius > CONFIG.width) {
@@ -3272,12 +3870,6 @@ function updateGame(dt) {
         ai.hp -= dmg;
         if (window.audio) window.audio.goalScored(isHyperSpike || duelMomentum >= 4);
         screenShake = (duelMomentum >= 4 || isHyperSpike) ? 14 : 9;
-        runScore += (isHyperSpike ? 400 : 200) * (duelMomentum >= 4 ? 2 : 1);
-
-        const announcement = (duelMomentum >= 4)
-          ? `🔥 OVERDRIVE GOAL! -${dmg} AI HP!`
-          : (isHyperSpike ? `🔥 HYPER-SPIKE GOAL! -${dmg} AI HP!` : `GOAL! -${dmg} AI HP`);
-        addFloatingText(announcement, CONFIG.width - 160, b.y, '#00e676');
         spawnParticles(CONFIG.width - 20, b.y, '#00e676', 16);
 
         if (ai.hp <= 0) {
@@ -3369,6 +3961,75 @@ function updateGame(dt) {
   }
 }
 
+function triggerWallBouncePerks(b) {
+  if (!b) return;
+  b.wallBounces = (b.wallBounces || 0) + 1;
+
+  if (hasArtifact('frictionless_core')) {
+    b.speedMultiplier = Math.max(b.speedMultiplier || 1.0, 1.25);
+  }
+
+  if (primaryPath === 'ricochet' || hasArtifact('geometric_trajectory') || hasArtifact('wall_resonance') || hasArtifact('chain_ricochet') || hasArtifact('photon_ricochet')) {
+    b.damageMultiplier = (b.damageMultiplier || 1.0) + (hasArtifact('geometric_trajectory') ? 0.20 : 0.12);
+
+    if (hasArtifact('wall_resonance') && b.wallBounces % 2 === 0) {
+      shockwaves.push({ x: b.x, y: b.y, radius: 10, maxRadius: 90, color: '#f43f5e', alpha: 0.85 });
+      bricks.filter(br => Math.hypot(br.x - b.x, br.y - b.y) < 95).forEach(br => queueBrickDamage(br.id, 2));
+      addFloatingText('🔊 WALL RESONANCE!', b.x, b.y, '#f43f5e');
+    }
+
+    if (hasArtifact('chain_ricochet') || hasArtifact('photon_ricochet')) {
+      lasers.push({
+        x: b.x,
+        y: b.y,
+        vx: 15,
+        vy: (Math.random() - 0.5) * 4,
+        w: 12,
+        h: 4,
+        color: '#f43f5e',
+        fromPlayer: true,
+        damage: 2
+      });
+    }
+
+    if (hasArtifact('corner_trap') && (b.y < 35 || b.y > CONFIG.height - 35)) {
+      b.damageMultiplier = (b.damageMultiplier || 1.0) * 1.5;
+      spawnParticles(b.x, b.y, '#f43f5e', 8);
+      addFloatingText('🎯 CORNER TRAP 1.5X!', b.x, b.y, '#f43f5e');
+    }
+  }
+
+  // Frozen Pinball: Wall ricochets spray freezing ice needles
+  if (hasArtifact('frozen_pinball')) {
+    for (let fn = 0; fn < 2; fn++) {
+      lasers.push({
+        x: b.x,
+        y: b.y,
+        vx: (b.vx > 0 ? 14 : -14),
+        vy: (Math.random() - 0.5) * 8,
+        w: 10,
+        h: 3,
+        color: '#00e5ff',
+        fromPlayer: true,
+        damage: 1
+      });
+    }
+    spawnParticles(b.x, b.y, '#00e5ff', 5);
+    addFloatingText('❄️ FROZEN PINBALL!', b.x, b.y, '#00e5ff');
+  }
+
+  // Zero-Point Capacitor: Unleashes lightning nova every 10 bounces
+  if (hasArtifact('zero_point_capacitor')) {
+    b.zeroPointBounces = (b.zeroPointBounces || 0) + 1;
+    if (b.zeroPointBounces >= 10) {
+      b.zeroPointBounces = 0;
+      shockwaves.push({ x: b.x, y: b.y, radius: 10, maxRadius: 140, color: '#00f2fe', alpha: 0.9 });
+      bricks.filter(br => Math.hypot(br.x - b.x, br.y - b.y) < 150).slice(0, 4).forEach(br => queueBrickDamage(br.id, 3));
+      addFloatingText('⚡ ZERO-POINT NOVA!', b.x, b.y, '#00f2fe');
+    }
+  }
+}
+
 // Enhanced paddle rebound with Velocity Momentum
 function handlePaddleRebound(b, pad, isPlayer) {
   const maxV = getFloorMaxSpeed();
@@ -3412,16 +4073,42 @@ function handlePaddleRebound(b, pad, isPlayer) {
       }
     }
 
-    // Precision critical center hit
+    // Precision / Critical center hit signature & weakpoint scanner
     const hitRel = Math.abs((b.y - (pad.y + pad.h / 2)) / (pad.h / 2));
-    if (primaryPath === 'precision' && hitRel < 0.25) {
+    if ((primaryPath === 'precision' || primaryPath === 'critical' || hasArtifact('weakpoint_scanner')) && hitRel < (hasArtifact('weakpoint_scanner') ? 0.35 : 0.25)) {
       if (window.audio) window.audio.criticalHit();
-      addFloatingText('CRITICAL CENTER HIT (2.5X)!', player.x + 40, player.y - 20, '#00f2fe');
+      player.consecutiveCrits = (player.consecutiveCrits || 0) + 1;
+      const critBonus = hasArtifact('critical_cascade') ? Math.min(2.5, player.consecutiveCrits * 0.5) : 0;
+      const totalCritMult = (2.5 + critBonus).toFixed(1);
+      addFloatingText(`🎯 CRITICAL CENTER HIT (${totalCritMult}X)!`, player.x + 40, player.y - 20, '#00f2fe');
       b.isCritical = true;
-      // Precision build synergy: jump duel momentum forward
+      b.critMultiplier = 2.5 + critBonus;
+      // Precision / Critical build synergy: jump duel momentum forward
       duelRallyCount = Math.max(duelRallyCount + 2, 6);
+
+      // Critical laser shards
+      for (let cs = 0; cs < 2; cs++) {
+        lasers.push({
+          x: player.x + player.w + 6,
+          y: player.y + (cs === 0 ? 12 : player.h - 12),
+          vx: 18,
+          vy: (cs === 0 ? -1.5 : 1.5),
+          w: 16,
+          h: 4,
+          color: '#00f2fe',
+          fromPlayer: true,
+          damage: 3
+        });
+      }
     } else {
       b.isCritical = false;
+      player.consecutiveCrits = 0;
+    }
+
+    // Razor Edge: extreme paddle edge deflections carve sharper angles
+    if (hasArtifact('razor_edge') && hitRel > 0.70) {
+      b.vy = Math.sign(b.vy) * Math.max(Math.abs(b.vy) * 1.25, 6);
+      addFloatingText('📐 RAZOR EDGE ANGLE!', player.x + 40, player.y - 12, '#00f2fe');
     }
 
     // Ricochet Shrapnel on sharp edge angles
@@ -3469,6 +4156,12 @@ function handlePaddleRebound(b, pad, isPlayer) {
             if (Math.hypot(br.x + br.w / 2 - player.x, br.y + br.h / 2 - player.y) < 140) br.hp -= 2;
           });
         }
+        if (hasArtifact('vampiric_crimson_overdrive')) {
+          shockwaves.push({ x: player.x + player.w, y: player.y + player.h / 2, radius: 15, maxRadius: 180, color: '#e11d48', alpha: 0.9 });
+          enemyBullets = enemyBullets.filter(eb => Math.hypot(eb.x - player.x, eb.y - player.y) > 180);
+          bricks.filter(br => Math.hypot(br.x - player.x, br.y - player.y) < 180).forEach(br => queueBrickDamage(br.id, 3));
+          addFloatingText('🩸 CRIMSON OVERDRIVE PULSE!', player.x + 40, player.y - 25, '#e11d48');
+        }
       }
     }
 
@@ -3482,33 +4175,71 @@ function handlePaddleRebound(b, pad, isPlayer) {
       enemyBullets = enemyBullets.filter(eb => Math.hypot(eb.x - player.x, eb.y - player.y) > 160);
       addFloatingText('THERMAL SHOCKWAVE!', player.x + 40, player.y - 15, '#ff5500');
     }
+    if (hasArtifact('hyper_combustion') && b.isSmash) {
+      b.hasHyperCombustion = true;
+      addFloatingText('🔥 HYPER-COMBUSTION SMASH!', player.x + 40, player.y - 15, '#ff5500');
+    }
 
-    // Gravity / Singularity
-    if (hasArtifact('gravity_battery')) {
+    // Gravity / Singularity (Path 15)
+    if (primaryPath === 'gravity' || hasArtifact('gravity_battery') || hasArtifact('gravity_graviton_anchor') || hasArtifact('event_horizon_field')) {
       railgunCharge = Math.min(100, railgunCharge + 12);
+      if (b.isSmash || primaryPath === 'gravity') {
+        shockwaves.push({ x: player.x + player.w + 50, y: player.y + player.h / 2, radius: 10, maxRadius: 180, color: '#8b5cf6', alpha: 0.85 });
+        addFloatingText('🌀 GRAVITON WELL VORTEX!', player.x + 40, player.y - 15, '#8b5cf6');
+      }
     }
     if (hasArtifact('singularity_core_prime') && b.isSmash) {
       b.hasSingularityPrime = true;
       addFloatingText('SINGULARITY PRIME SMASH!', player.x + 40, player.y - 15, '#8b5cf6');
     }
 
-    // Chrono / Temporal Stasis
+    // Chrono / Temporal Stasis (Path 16)
     if (hasArtifact('stasis_bubble') && Math.abs((b.y - (pad.y + pad.h / 2)) / (pad.h / 2)) < 0.25) {
       enemyBullets.forEach(eb => { eb.vx *= 0.2; eb.vy *= 0.2; });
       addFloatingText('⏳ STASIS BUBBLE (BULLETS FROZEN)!', player.x + 40, player.y - 20, '#06b6d4');
     }
+    if (hasArtifact('chrono_temporal_echo')) {
+      phantomBalls.push({
+        x: b.x,
+        y: b.y,
+        vx: b.vx * 0.92,
+        vy: b.vy + (Math.random() - 0.5) * 3,
+        radius: b.radius || 6,
+        alpha: 0.75,
+        life: 120
+      });
+      addFloatingText('⏳ CHRONO TEMPORAL ECHO!', b.x, b.y, '#06b6d4');
+    }
+    if (hasArtifact('chronos_perpetual')) {
+      if (typeof activeBuffs !== 'undefined') {
+        Object.keys(activeBuffs).forEach(k => {
+          if (typeof activeBuffs[k] === 'number' && activeBuffs[k] > 0) activeBuffs[k] += 60;
+        });
+      }
+      if (window.abilityCooldowns) {
+        Object.keys(window.abilityCooldowns).forEach(k => {
+          window.abilityCooldowns[k] = Math.max(0, (window.abilityCooldowns[k] || 0) - 30);
+        });
+      }
+      addFloatingText('⏳ CHRONOS PERPETUAL (+1s)', player.x + 35, player.y - 15, '#06b6d4');
+    }
+    if (hasArtifact('time_slip_overdrive') && b.isSmash) {
+      b.speed = (b.speed || 8) * 1.35;
+      b.damageMultiplier = (b.damageMultiplier || 1.0) * 1.5;
+      addFloatingText('⏳ TIME-SLIP OVERDRIVE 1.5X!', player.x + 40, player.y - 20, '#06b6d4');
+    }
 
-    // Stealth / Phantom Ambush
-    if (player.isCloaked || hasArtifact('optical_camouflage')) {
-      if (player.isCloaked) {
+    // Stealth / Phantom Ambush (Path 18)
+    if (primaryPath === 'stealth' || player.isCloaked || hasArtifact('optical_camouflage') || hasArtifact('stealth_shadow_cloak') || hasArtifact('smoke_decoy_emitter')) {
+      if (player.isCloaked || primaryPath === 'stealth') {
         player.isCloaked = false;
         b.isCritical = true;
         b.speedMultiplier = (b.speedMultiplier || 1) * 1.5;
-        addFloatingText('🥷 AMBUSH STRIKE (2.5X CRIT)!', player.x + 40, player.y - 20, '#cbd5e1');
-        if (hasArtifact('shadow_assassin')) {
+        addFloatingText('🥷 AMBUSH STRIKE (3.0X CRIT)!', player.x + 40, player.y - 20, '#cbd5e1');
+        if (hasArtifact('shadow_assassin') || hasArtifact('phantom_execution') || hasArtifact('stealth_backstab_protocol')) {
           b.isPiercing = true;
         }
-        if (hasArtifact('ambush_capacitor')) {
+        if (hasArtifact('ambush_capacitor') || hasArtifact('smoke_decoy_emitter')) {
           for (let sh = 0; sh < 3; sh++) {
             lasers.push({ x: player.x + player.w + 5, y: player.y + 10 + sh * 15, vx: 18, vy: (sh - 1) * 2, w: 14, h: 4, color: '#64748b', fromPlayer: true, damage: 3 });
           }
@@ -3516,17 +4247,19 @@ function handlePaddleRebound(b, pad, isPlayer) {
       }
     }
 
-    // Acoustic / Resonance
-    if (hasArtifact('ultrasonic_pulse') && b.isSmash) {
-      shockwaves.push({ x: player.x + player.w, y: player.y + player.h / 2, radius: 10, maxRadius: 200, color: '#ec4899', alpha: 0.8 });
-      if (ai && ai.active) ai.speedMult = 0.5;
-      addFloatingText('🔊 ULTRASONIC STUN WAVE!', player.x + 40, player.y - 20, '#ec4899');
+    // Acoustic / Resonance (Path 19)
+    if (primaryPath === 'resonance' || hasArtifact('ultrasonic_pulse') || hasArtifact('acoustic_transducer') || hasArtifact('resonance_tuning_fork') || hasArtifact('seismic_rebound')) {
+      if (b.isSmash || primaryPath === 'resonance') {
+        shockwaves.push({ x: player.x + player.w, y: player.y + player.h / 2, radius: 10, maxRadius: 200, color: '#ec4899', alpha: 0.8 });
+        if (ai && ai.active) ai.speedMult = 0.5;
+        addFloatingText('🔊 ULTRASONIC SHATTERWAVE!', player.x + 40, player.y - 20, '#ec4899');
+      }
     }
 
-    // Cyberware / Overclock
-    if (hasArtifact('heat_sink_thrusters') || primaryPath === 'overclock') {
+    // Cyberware / Overclock (Path 20)
+    if (hasArtifact('heat_sink_thrusters') || primaryPath === 'overclock' || hasArtifact('overclock_thermal_burst')) {
       player.thermalCharge = Math.min(100, (player.thermalCharge || 0) + 15);
-      if (player.thermalCharge >= 100 && hasArtifact('steam_vent_blast')) {
+      if (player.thermalCharge >= 100 && (hasArtifact('steam_vent_blast') || primaryPath === 'overclock')) {
         player.thermalCharge = 0;
         shockwaves.push({ x: player.x + player.w, y: player.y + player.h / 2, radius: 15, maxRadius: 180, color: '#f59e0b', alpha: 0.9 });
         enemyBullets.length = 0;
@@ -3537,60 +4270,300 @@ function handlePaddleRebound(b, pad, isPlayer) {
       }
     }
 
-    // Prismatic / Refraction
-    if (hasArtifact('prismatic_facets') || primaryPath === 'mirror') {
+    // Prismatic / Refraction (Path 21)
+    if (hasArtifact('prismatic_facets') || primaryPath === 'mirror' || hasArtifact('spectrum_lance') || hasArtifact('kaleidoscope_shards')) {
       lasers.push({ x: player.x + player.w + 4, y: player.y + player.h / 2, vx: 15, vy: -b.vy * 0.8, w: 20, h: 4, color: '#38bdf8', fromPlayer: true, damage: 2 });
     }
-    if (hasArtifact('refraction_splitter') && Math.abs((b.y - (pad.y + pad.h / 2)) / (pad.h / 2)) < 0.25) {
+    if ((hasArtifact('refraction_splitter') || hasArtifact('mirror_refraction_lens') || hasArtifact('mirror_duplication_matrix') || primaryPath === 'mirror') && Math.abs((b.y - (pad.y + pad.h / 2)) / (pad.h / 2)) < 0.25) {
       if (phantomBalls.length < 4) {
         phantomBalls.push({ x: b.x, y: b.y, vx: b.vx * 0.9, vy: b.vy + 2.5, radius: 5, alpha: 0.8, life: 360 });
         phantomBalls.push({ x: b.x, y: b.y, vx: b.vx * 0.9, vy: b.vy - 2.5, radius: 5, alpha: 0.8, life: 360 });
         addFloatingText('🪞 PRISMATIC REFRACTION!', b.x, b.y, '#38bdf8');
       }
     }
+    if (hasArtifact('omni_reflector') && enemyBullets && enemyBullets.length > 0) {
+      let reflCount = 0;
+      enemyBullets.forEach(eb => {
+        if (Math.hypot(eb.x - player.x, eb.y - (player.y + player.h / 2)) < 160) {
+          eb.vx = Math.abs(eb.vx || 6) * 1.5;
+          eb.fromPlayer = true;
+          eb.color = '#38bdf8';
+          reflCount++;
+        }
+      });
+      if (reflCount > 0) {
+        addFloatingText('🪞 OMNI-REFLECTOR!', player.x + 35, player.y - 20, '#38bdf8');
+      }
+    }
 
-    // Polarity / Magnetic
-    if (hasArtifact('polarity_repulsor_gate')) {
+    // Polarity / Magnetic (Path 23)
+    if (primaryPath === 'magnetic' || hasArtifact('polarity_repulsor_gate') || hasArtifact('magnetic_gauss_accelerator')) {
       if (ai && ai.active) ai.x = Math.min(CONFIG.width - 40, ai.x + 30);
       enemyBullets.forEach(eb => { eb.vx = Math.abs(eb.vx) * 0.5; });
-      addFloatingText('🧲 POLARITY REPULSOR!', player.x + 40, player.y - 15, '#0ea5e9');
+      if (hasArtifact('magnetic_gauss_accelerator') && b.isSmash) {
+        lasers.push({ x: player.x + player.w + 6, y: player.y + player.h / 2, vx: 26, vy: 0, w: 24, h: 6, color: '#0ea5e9', fromPlayer: true, piercing: true, damage: 5 });
+        addFloatingText('🧲 GAUSS ACCELERATOR SLUG!', player.x + 40, player.y - 15, '#0ea5e9');
+      } else {
+        addFloatingText('🧲 POLARITY REPULSOR!', player.x + 40, player.y - 15, '#0ea5e9');
+      }
     }
-    if (hasArtifact('flux_inversion_pulse')) {
+    if (hasArtifact('magnetic_induction') && Math.abs((b.y - (pad.y + pad.h / 2)) / (pad.h / 2)) > 0.35) {
+      railgunCharge = Math.min(100, railgunCharge + 15);
+      if (window.abilityCooldowns) {
+        Object.keys(window.abilityCooldowns).forEach(k => {
+          window.abilityCooldowns[k] = Math.max(0, (window.abilityCooldowns[k] || 0) - 45);
+        });
+      }
+      addFloatingText('🧲 INDUCTION CHARGE!', player.x + 35, player.y - 15, '#0ea5e9');
+    }
+    if (hasArtifact('magnetic_lockdown') && !player.magnetHeldBall && Math.random() < 0.35) {
+      player.magnetHeldBall = b;
+      b.vx = 0;
+      b.vy = 0;
+      b.x = player.x + player.w + b.radius + 2;
+      b.y = player.y + player.h / 2;
+      setTimeout(() => {
+        if (player && player.magnetHeldBall === b) {
+          player.magnetHeldBall = null;
+          b.vx = 14;
+          b.vy = (Math.random() - 0.5) * 4;
+          b.speedMultiplier = 2.5;
+          addFloatingText('🧲 MAGNETIC LOCKDOWN (2.5X LAUNCH)!', player.x + 40, player.y, '#0ea5e9');
+        }
+      }, 450);
+      addFloatingText('🧲 MAGNETIC LOCKDOWN!', player.x + 35, player.y - 20, '#0ea5e9');
+    }
+    if (hasArtifact('magnetic_blast')) {
+      shockwaves.push({ x: player.x + player.w, y: player.y + player.h / 2, radius: 15, maxRadius: 180, color: '#0ea5e9', alpha: 0.9 });
+      if (ai && ai.active) ai.x = Math.min(CONFIG.width - 40, ai.x + 50);
+      enemyBullets.forEach(eb => { eb.vx = Math.abs(eb.vx) * 1.5; });
+      addFloatingText('🧲 MAGNETIC CONCUSSIVE BLAST!', player.x + 40, player.y - 15, '#0ea5e9');
+    }
+    if (hasArtifact('flux_inversion_pulse') || hasArtifact('magnetic_electromagnetic_pulse')) {
       shockwaves.push({ x: player.x + player.w, y: player.y + player.h / 2, radius: 10, maxRadius: 100, color: '#0ea5e9', alpha: 0.8 });
     }
 
-    // Radiant / Solar
-    if (hasArtifact('photonic_collector') || primaryPath === 'solar') {
-      player.solarRally = (player.solarRally || 0) + 1;
+    // Radiant / Solar (Path 24)
+    if (hasArtifact('photonic_collector') || primaryPath === 'solar' || hasArtifact('solar_collector_array')) {
+      const rallyInc = hasArtifact('solar_collector_array') ? 2 : 1;
+      player.solarRally = (player.solarRally || 0) + rallyInc;
       b.damageMultiplier = 1.0 + (player.solarRally * 0.12);
-      if (player.solarRally >= 8 && hasArtifact('supernova_burst_core')) {
+      const supernovaReq = hasArtifact('radiant_supernova') ? 5 : 8;
+      if (player.solarRally >= supernovaReq && (hasArtifact('supernova_burst_core') || primaryPath === 'solar' || hasArtifact('radiant_supernova'))) {
         player.solarRally = 0;
         screenShake = 12;
         spawnParticles(CONFIG.width / 2, CONFIG.height / 2, '#eab308', 35);
+        const bossBonus = hasArtifact('solar_supernova_core') ? 40 : 25;
         bricks.forEach((br, idx) => { if (idx % 2 === 0) br.hp -= 4; });
+        if (bennieBoss && !bennieBoss.isDefeated) damageBennie(bossBonus, 'supernova');
         addFloatingText('☀️ SUPERNOVA BURST!', CONFIG.width / 2 - 80, CONFIG.height / 2, '#eab308');
         if (window.audio) window.audio.tntExplode();
       }
+      if (hasArtifact('solar_flare_blaster') && player.solarRally % 3 === 0) {
+        lasers.push({ x: player.x + player.w + 6, y: player.y + player.h / 2, vx: 20, vy: 0, w: 22, h: 5, color: '#eab308', fromPlayer: true, piercing: true, damage: 4 });
+        addFloatingText('☀️ SOLAR FLARE LANCE!', player.x + 40, player.y - 15, '#eab308');
+      }
+      if (hasArtifact('solar_coronal_mass') && b.isSmash) {
+        shockwaves.push({ x: player.x + player.w, y: player.y + player.h / 2, radius: 15, maxRadius: 220, color: '#f59e0b', alpha: 0.95 });
+        enemyBullets.length = 0;
+        if (ai && ai.active) ai.stunTimer = Math.max(ai.stunTimer || 0, 120);
+        bricks.filter(br => Math.hypot(br.x - player.x, br.y - player.y) < 220).forEach(br => queueBrickDamage(br.id, 3));
+        addFloatingText('☀️ CORONAL MASS EJECTION!', player.x + 40, player.y - 20, '#f59e0b');
+      }
+      if (hasArtifact('helios_lance') && hitRel < 0.25) {
+        lasers.push({ x: player.x + player.w + 8, y: player.y + player.h / 2, vx: 24, vy: 0, w: 32, h: 6, color: '#ffd700', fromPlayer: true, piercing: true, damage: 6 });
+        addFloatingText('☀️ HELIOS LANCE!', player.x + 40, player.y - 25, '#ffd700');
+      }
     }
 
-    // Inventor / Bennie's Prototype
-    if (hasArtifact('spring_loaded_bumper') && b.isSmash) {
-      if (roomType === 'BREAKOUT' && bricks.length > 0) {
-        const targetBr = bricks[Math.floor(Math.random() * bricks.length)];
-        if (targetBr) {
-          spawnParticles(targetBr.x, targetBr.y, '#ffd700', 12);
-          targetBr.hp -= 3;
-          addFloatingText('💡 KINETIC BUMPER SLAM!', targetBr.x, targetBr.y, '#ffd700');
+    // ========================================================================
+    // COMPLETE 25-PATH PROGRESSION & INVENTOR PROTOTYPE RUNTIME ENGINE
+    // ========================================================================
+
+    // 1. INVENTOR / BENNIE'S PROTOTYPE RUNTIME ENGINE (Path 25 & Upgrades)
+    if (primaryPath === 'inventor' || hasArtifact('spring_loaded_bumper') || hasArtifact('inventor_gear_launcher') || hasArtifact('homing_wrench_drone') || hasArtifact('doomsday_contraption')) {
+      // 1.1 Spring Bumper deployment on smash or Inventor passive
+      if ((b.isSmash || primaryPath === 'inventor') && (hasArtifact('spring_loaded_bumper') || primaryPath === 'inventor')) {
+        const bmpX = Math.min(CONFIG.width - 150, player.x + 85 + Math.random() * 45);
+        const bmpY = Math.max(40, Math.min(CONFIG.height - 40, player.y + player.h / 2 + (Math.random() - 0.5) * 80));
+        playerBumpers.push({
+          x: bmpX,
+          y: bmpY,
+          radius: 24,
+          life: 480, // 8 seconds
+          pulse: 0,
+          color: '#ffd700'
+        });
+        spawnParticles(bmpX, bmpY, '#ffd700', 12);
+        if (window.audio && typeof window.audio.powerupGet === 'function') window.audio.powerupGet();
+        addFloatingText('💡 SPRING BUMPER DEPLOYED!', bmpX, bmpY - 15, '#ffd700');
+
+        if (roomType === 'BREAKOUT' && bricks.length > 0) {
+          const targetBr = bricks[Math.floor(Math.random() * bricks.length)];
+          if (targetBr) {
+            queueBrickDamage(targetBr.id, 3);
+            spawnParticles(targetBr.x, targetBr.y, '#ffd700', 10);
+          }
+        } else if (bennieBoss && !bennieBoss.isDefeated) {
+          damageBennie(3, 'prototype_slam');
+        } else if (ai.active) {
+          ai.hp = Math.max(0, ai.hp - 1);
+          ai.stunTimer = 60;
+        }
+      }
+
+      // 1.2 Prototype Gear Launcher (Smash or every hit for Inventor)
+      if (hasArtifact('inventor_gear_launcher') || (primaryPath === 'inventor' && (b.isSmash || Math.random() < 0.45))) {
+        const gearCount = hasArtifact('inventor_gear_launcher') ? 2 : 1;
+        for (let g = 0; g < gearCount; g++) {
+          playerGears.push({
+            x: player.x + player.w + 8,
+            y: player.y + (g === 0 ? 12 : player.h - 12),
+            vx: 9.5 + Math.random() * 2,
+            vy: (g === 0 ? -2.5 : 2.5) + (Math.random() - 0.5),
+            radius: 10,
+            angle: 0,
+            life: 360,
+            bounces: 0,
+            damage: 3,
+            color: '#ffd700'
+          });
+        }
+        if (window.audio && typeof window.audio.laserShoot === 'function') window.audio.laserShoot();
+        addFloatingText('⚙️ PROTOTYPE GEAR LAUNCH!', player.x + 40, player.y - 15, '#ffd700');
+      }
+
+      // 1.3 Homing Wrench Deployer (Every 4th hit, or every 3rd hit on Inventor)
+      const wrenchThreshold = primaryPath === 'inventor' ? 3 : 4;
+      if (hasArtifact('homing_wrench_drone') || primaryPath === 'inventor') {
+        player.wrenchHits = (player.wrenchHits || 0) + 1;
+        if (player.wrenchHits >= wrenchThreshold) {
+          player.wrenchHits = 0;
+          playerHomingWrenches.push({
+            x: player.x + player.w + 10,
+            y: player.y + player.h / 2,
+            vx: 8,
+            vy: (Math.random() - 0.5) * 3,
+            angle: 0,
+            life: 240,
+            damage: 4,
+            color: '#ffd700'
+          });
+          if (window.audio && typeof window.audio.powerupGet === 'function') window.audio.powerupGet();
+          addFloatingText('🔧 HOMING WRENCH FIRED!', player.x + 35, player.y - 15, '#ffd700');
+        }
+      }
+
+      // 1.4 Doomsday Contraption (Bennie's Masterpiece Prototype: on smash or every 6th hit)
+      if (hasArtifact('doomsday_contraption')) {
+        player.bennieMasterpieceHits = (player.bennieMasterpieceHits || 0) + 1;
+        if (b.isSmash || player.bennieMasterpieceHits >= 6) {
+          player.bennieMasterpieceHits = 0;
+          playerMasterpiece = {
+            x: CONFIG.width / 2,
+            y: 45,
+            vx: 2.2,
+            life: 720,
+            shootTimer: 0,
+            bombTimer: 0,
+            pulse: 0
+          };
+          screenShake = 10;
+          if (window.audio && typeof window.audio.legendaryJingle === 'function') window.audio.legendaryJingle();
+          addFloatingText("💡 BENNIE'S MASTERPIECE PROTOTYPE DEPLOYED! 💡", CONFIG.width / 2 - 140, 60, '#ffd700');
         }
       }
     }
-    if (hasArtifact('homing_wrench_drone')) {
-      player.wrenchHits = (player.wrenchHits || 0) + 1;
-      if (player.wrenchHits >= 4) {
-        player.wrenchHits = 0;
-        lasers.push({ x: player.x + player.w + 6, y: player.y + player.h / 2, vx: 14, vy: (Math.random() - 0.5) * 4, w: 16, h: 6, color: '#ffd700', fromPlayer: true, damage: 4 });
-        addFloatingText('🔧 HOMING WRENCH FIRED!', player.x + 35, player.y - 15, '#ffd700');
+
+    // 2. KINETIC / IMPACT CHARGE (Path 1)
+    if (primaryPath === 'kinetic' || hasArtifact('heavy_strike') || hasArtifact('kinetic_burst')) {
+      if (b.isSmash) {
+        b.damageMultiplier = (b.damageMultiplier || 1.0) * 1.5;
+        shockwaves.push({ x: player.x + player.w, y: player.y + player.h / 2, radius: 10, maxRadius: 150, color: '#ff5500', alpha: 0.9 });
+        addFloatingText('💥 KINETIC IMPACT CHARGE (1.5X)!', player.x + 40, player.y - 15, '#ff5500');
       }
+      if (hasArtifact('heavy_strike') && ai.active) {
+        ai.stunTimer = 60;
+        ai.x = Math.min(CONFIG.width - 30, ai.x + 40);
+        addFloatingText('🔨 HEAVY KNOCKBACK!', ai.x, ai.y, '#ff5500');
+      }
+    }
+
+    // 3. BIO-CORROSION / CONTAMINATION (Path 6)
+    if (primaryPath === 'bio' || hasArtifact('acid_mists') || hasArtifact('neurotoxin_injector')) {
+      b.isBio = true;
+      b.bioTicks = 3;
+      addFloatingText('🧪 CAUSTIC CONTAMINATION!', player.x + 40, player.y - 15, '#10b981');
+    }
+
+    // 4. CRYO / SHATTER (Path 7)
+    if (primaryPath === 'cryo' || hasArtifact('subzero_coating') || hasArtifact('frost_dynamo')) {
+      b.isCryo = true;
+      addFloatingText('❄️ PERMAFROST SHATTER!', player.x + 40, player.y - 15, '#06b6d4');
+      if (hasArtifact('subzero_coating') && hitRel < 0.25) {
+        b.instantFreeze = true;
+        addFloatingText('🧊 INSTANT FREEZE ARMED!', player.x + 40, player.y - 25, '#06b6d4');
+      }
+    }
+
+    // 5. ELECTROMAGNETIC / CONDUCTIVITY (Path 8)
+    if (primaryPath === 'electro' || hasArtifact('arc_discharge') || hasArtifact('superconductor')) {
+      b.isElectro = true;
+      lightningArcs.push({ x1: player.x + player.w, y1: player.y + player.h / 2, x2: b.x, y2: b.y, life: 10 });
+      addFloatingText('⚡ TESLA CONDUCTIVITY!', player.x + 40, player.y - 15, '#00f2fe');
+    }
+
+    // 6. RICOCHET / PERFECT BOUNCE (Path 9)
+    if (primaryPath === 'ricochet' || hasArtifact('geometric_trajectory') || hasArtifact('wall_resonance')) {
+      b.isRicochetBuild = true;
+      addFloatingText('📐 GEOMETRIC TRAJECTORY!', player.x + 40, player.y - 15, '#f43f5e');
+    }
+
+    // 7. QUANTUM / PHASE STATE (Path 10)
+    if (primaryPath === 'quantum' || hasArtifact('singularity_lens') || hasArtifact('void_compression')) {
+      b.isQuantum = true;
+      if (b.isSmash && phantomBalls.length < 5) {
+        phantomBalls.push({ x: b.x, y: b.y, vx: b.vx * 0.95, vy: -b.vy, radius: 5, alpha: 0.8, life: 300 });
+        addFloatingText('⚛️ QUANTUM PHASE ECHO!', player.x + 40, player.y - 15, '#c084fc');
+      }
+    }
+
+    // 8. ARTILLERY / CHARGE SHOT (Path 11)
+    if (primaryPath === 'artillery' || hasArtifact('mortar_blast') || hasArtifact('heavy_ordnance')) {
+      player.artilleryHits = (player.artilleryHits || 0) + 1;
+      if (player.artilleryHits % 4 === 0) {
+        lasers.push({ x: player.x + player.w + 6, y: player.y + player.h / 2, vx: 22, vy: 0, w: 28, h: 8, color: '#f59e0b', fromPlayer: true, piercing: true, damage: 6 });
+        addFloatingText('💥 ARTILLERY RAIL CANNON!', player.x + 40, player.y - 15, '#f59e0b');
+      }
+      if (hasArtifact('mortar_blast') && player.artilleryHits % 5 === 0) {
+        lasers.push({ x: player.x + player.w + 6, y: player.y + 10, vx: 12, vy: -4, w: 14, h: 14, color: '#f59e0b', fromPlayer: true, damage: 5 });
+        addFloatingText('💣 MORTAR SHELL LAUNCHED!', player.x + 40, player.y - 25, '#f59e0b');
+      }
+    }
+
+    // 9. GAMBLER / FORTUNE (Path 12)
+    if (primaryPath === 'gambler' || hasArtifact('gambler_loaded_dice') || hasArtifact('high_roller_core')) {
+      const gRoll = 0.7 + Math.random() * 1.8;
+      b.damageMultiplier = (b.damageMultiplier || 1.0) * gRoll;
+      addFloatingText('🎲 FORTUNE ROLL x' + gRoll.toFixed(1) + '!', player.x + 40, player.y - 15, '#ffd700');
+      if (b.isSmash && Math.random() < 0.35) {
+        runDataChips += 3;
+        addFloatingText('+3 BONUS CHIPS!', player.x + 40, player.y - 25, '#ffd700');
+      }
+      if (hasArtifact('lucky_streak')) {
+        player.luckyHits = (player.luckyHits || 0) + 1;
+        if (player.luckyHits >= 5) {
+          player.luckyHits = 0;
+          activeBuffs.shieldCharges = Math.min(4, (activeBuffs.shieldCharges || 0) + 1);
+          addFloatingText('🍀 LUCKY STREAK: +1 SHIELD!', player.x + 35, player.y - 15, '#ffd700');
+        }
+      }
+    }
+
+    // 10. PLAGUE / CAUSTIC MIASMA (Path 22)
+    if (primaryPath === 'plague' || hasArtifact('virulent_strain') || hasArtifact('plague_virulent_strain')) {
+      b.isPlague = true;
+      addFloatingText('☣️ CAUSTIC MIASMA COATING!', player.x + 40, player.y - 15, '#10b981');
     }
 
     // Kinetic battery charge
@@ -3713,24 +4686,6 @@ function handlePaddleRebound(b, pad, isPlayer) {
       }
     }
 
-    // Inventor Gear Launcher & Spring Bumper
-    if (hasArtifact('inventor_gear_launcher') && b.isSmash) {
-      for (let g = 0; g < 2; g++) {
-        lasers.push({
-          x: player.x + player.w + 6,
-          y: player.y + (g === 0 ? 10 : player.h - 10),
-          vx: 12,
-          vy: (g === 0 ? -2.5 : 2.5),
-          w: 12,
-          h: 12,
-          color: '#ffd700',
-          fromPlayer: true,
-          damage: 2
-        });
-      }
-      addFloatingText('⚙️ PROTOTYPE GEAR LAUNCH!', player.x + 40, player.y - 15, '#ffd700');
-    }
-
     duelRallyCount++;
     const prevMomentum = duelMomentum;
     if (duelRallyCount >= 9) duelMomentum = 4;
@@ -3766,6 +4721,27 @@ function handlePaddleRebound(b, pad, isPlayer) {
 
     combo = Math.min(10, combo + 1);
     comboTimer = 220;
+
+    // Combo Processor: 5+ hit combo grants +2 bonus cores per hit
+    if (hasArtifact('combo_processor') && combo >= 5) {
+      runCoresEarned += 2;
+      metaSave.cores = (metaSave.cores || 0) + 2;
+      saveMetaProgress();
+      if (window.audio) window.audio.coinGet();
+      addFloatingText('+2 CORES (COMBO PROCESSOR)', player.x + 35, player.y - 25, '#ffd700');
+    }
+
+    // Gambler's Catalyst: Every 7th hit rolls random critical damage between 2.0x and 5.0x
+    if (hasArtifact('gamblers_catalyst')) {
+      player.gamblersCatalystHits = (player.gamblersCatalystHits || 0) + 1;
+      if (player.gamblersCatalystHits % 7 === 0) {
+        const catRoll = 2.0 + Math.random() * 3.0;
+        b.damageMultiplier = (b.damageMultiplier || 1.0) * catRoll;
+        screenShake = 6;
+        if (window.audio) window.audio.wheelWin();
+        addFloatingText(`🎰 GAMBLER'S CATALYST x${catRoll.toFixed(1)}!`, player.x + 40, player.y - 20, '#ffd700');
+      }
+    }
 
     if (combo === 10 && isMarketModActive('mod_black_ice')) {
       runCoresEarned += 1;
@@ -4029,6 +5005,35 @@ function checkBrickCollisions(b) {
         baseDamage += 2;
       }
 
+      if (hasArtifact('nanite_molecular_dissolver')) {
+        br.acidResistance = 0;
+        br.shieldStripped = true;
+        baseDamage += 1;
+      }
+
+      if (hasArtifact('superheated_plasma') && br.burning) {
+        baseDamage = Math.round(baseDamage * 1.6);
+        shockwaves.push({ x: br.x + br.w / 2, y: br.y + br.h / 2, radius: 10, maxRadius: 75, color: '#ff5500', alpha: 0.85 });
+        addFloatingText('🔥 SUPERHEATED IMPACT!', br.x, br.y, '#ff5500');
+      }
+
+      if (hasArtifact('ricochet_kinetic_billiard')) {
+        bricks.filter(nb => nb.id !== br.id && Math.hypot(nb.x - br.x, nb.y - br.y) < 70).forEach(nb => {
+          queueBrickDamage(nb.id, Math.max(1, Math.round(baseDamage * 0.4)));
+          spawnParticles(nb.x + nb.w / 2, nb.y + nb.h / 2, '#f43f5e', 4);
+        });
+      }
+
+      if (b.hasHyperCombustion) {
+        b.hasHyperCombustion = false;
+        shockwaves.push({ x: br.x + br.w / 2, y: br.y + br.h / 2, radius: 15, maxRadius: 110, color: '#ff5500', alpha: 0.9 });
+        bricks.filter(nb => nb.id !== br.id && Math.hypot(nb.x - br.x, nb.y - br.y) < 110).forEach(nb => {
+          nb.burning = true;
+          queueBrickDamage(nb.id, 2);
+        });
+        addFloatingText('💥 HYPER-COMBUSTION BLAST!', br.x, br.y, '#ff5500');
+      }
+
       queueBrickDamage(br.id, baseDamage);
 
       if (activeBuffs.lightning > 0) {
@@ -4044,22 +5049,25 @@ function triggerChainLightning(sourceBrick) {
   const sx = sourceBrick.x + sourceBrick.w / 2;
   const sy = sourceBrick.y + sourceBrick.h / 2;
 
+  const maxJumps = hasArtifact('electro_arc_capacitor') ? 5 : 3;
+  const shockDmg = hasArtifact('electro_arc_capacitor') ? 2 : 1;
+
   let struck = 0;
   for (let j = 0; j < bricks.length; j++) {
     const target = bricks[j];
     if (target.id === sourceBrick.id) continue;
     const dist = Math.hypot(target.x - sourceBrick.x, target.y - sourceBrick.y);
-    if (dist < 140) {
-      queueBrickDamage(target.id, 1);
+    if (dist < 150) {
+      queueBrickDamage(target.id, shockDmg);
       lightningArcs.push({
         x1: sx,
         y1: sy,
         x2: target.x + target.w / 2,
         y2: target.y + target.h / 2,
-        life: 6
+        life: 7
       });
       struck++;
-      if (struck >= 3) break;
+      if (struck >= maxJumps) break;
     }
   }
 }
@@ -4345,16 +5353,75 @@ function damagePlayer(rawAmount = 1, type = 'generic', source = null) {
     screenShake = 6;
     spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#00f2fe', 16);
     addFloatingText('⚡ SHIELD ABSORBED!', player.x + 35, player.y - 15, '#00f2fe');
+    if (hasArtifact('mirror_kaleidoscope_shield')) {
+      for (let k = 0; k < 3; k++) {
+        lasers.push({ x: player.x + 30, y: player.y + 10 + k * 18, vx: 18, vy: (k - 1) * 3, w: 14, h: 4, color: '#38bdf8', fromPlayer: true, damage: 3 });
+      }
+    }
     updateHud();
     return 0;
   }
 
+  // 1.5 Holographic Baffle & Ghost/Afterimage Dodge Chances
+  if (hasArtifact('holographic_baffle') && Math.random() < 0.25) {
+    addFloatingText('👻 HOLOGRAPHIC DODGE!', player.x + 35, player.y - 15, '#c084fc');
+    spawnParticles(player.x + 20, player.y, '#c084fc', 8);
+    return 0;
+  }
+  if (hasArtifact('spectral_afterimage') && Math.random() < 0.25) {
+    addFloatingText('👻 AFTERIMAGE ABSORPTION!', player.x + 35, player.y - 15, '#00f2fe');
+    spawnParticles(player.x + 20, player.y, '#00f2fe', 8);
+    return 0;
+  }
+  if (hasArtifact('stealth_ghost_decoy') && Math.random() < 0.25) {
+    addFloatingText('🥷 GHOST DECOY HIT!', player.x + 35, player.y - 15, '#cbd5e1');
+    spawnParticles(player.x + 20, player.y, '#cbd5e1', 8);
+    return 0;
+  }
+  if (hasArtifact('fortified_fleet') && Math.random() < 0.30) {
+    addFloatingText('🤖 DRONE INTERCEPT!', player.x + 35, player.y - 15, '#00e676');
+    spawnParticles(player.x + 20, player.y, '#00e676', 10);
+    return 0;
+  }
+
+  // Emergency Heatsink Vent
+  if (hasArtifact('emergency_heatsink')) {
+    shockwaves.push({ x: player.x + player.w / 2, y: player.y + player.h / 2, radius: 10, maxRadius: 160, color: '#f59e0b', alpha: 0.9 });
+    enemyBullets.length = 0;
+    addFloatingText('🔥 HEATSINK THERMAL PURGE!', player.x + 35, player.y - 25, '#f59e0b');
+  }
+
+  // Cryo Containment: Flash-freezes screen hostiles for 2.0s upon taking damage
+  if (hasArtifact('cryo_containment')) {
+    bricks.forEach(br => { br.frozen = true; });
+    if (ai && ai.active) ai.frozenTimer = 120;
+    if (window.roomManager && window.roomManager.swarmEnemies) {
+      window.roomManager.swarmEnemies.forEach(e => { e.frozen = true; });
+    }
+    addFloatingText('❄️ CRYO CONTAINMENT FREEZE!', player.x + 35, player.y - 30, '#00e5ff');
+  }
+
+  // Nanite Chassis Repair: Emergency nanites repair 1 HP and grant 2.0s invulnerability
+  if (hasArtifact('nanite_chassis_repair') && (!player.naniteRepairCooldown || player.naniteRepairCooldown <= 0)) {
+    player.naniteRepairCooldown = 360;
+    player.hp = Math.min(player.maxHp, player.hp + 1);
+    player.invulnerableTimer = 120;
+    addFloatingText('🛠️ NANITE CHASSIS REPAIR (+1 HP)!', player.x + 35, player.y - 25, '#38bdf8');
+  }
+
   // 2. Integer Damage Tiers & Defensive Mitigation
   let finalDmg = Math.max(1, Math.round(rawAmount));
+  if (hasArtifact('neurotoxin_emitter')) {
+    finalDmg = Math.max(1, Math.round(finalDmg * 0.7));
+  }
   const hasArmor = primaryPath === 'juggernaut' ||
     hasArtifact('reinforced_hull') ||
     hasArtifact('titan_plating') ||
     hasArtifact('nanite_barrier') ||
+    hasArtifact('nano_plating') ||
+    hasArtifact('reactive_armor') ||
+    hasArtifact('fortress_core') ||
+    hasArtifact('thermal_plating') ||
     (activeChar && (activeChar.id === 'bastion' || activeChar.id === 'dreadnought'));
 
   if (hasArmor) {
@@ -4370,6 +5437,12 @@ function damagePlayer(rawAmount = 1, type = 'generic', source = null) {
       spawnParticles(player.x + 20, player.y, '#00e676', 10);
       return 0;
     }
+  }
+
+  // Aegis Rebounder Retaliation
+  if (hasArtifact('aegis_rebounder')) {
+    shockwaves.push({ x: player.x + player.w / 2, y: player.y + player.h / 2, radius: 10, maxRadius: 110, color: '#38bdf8', alpha: 0.85 });
+    if (ai && ai.active) ai.hp = Math.max(0, ai.hp - 1);
   }
 
   // 3a. Legendary Emergency Matrix Drop Failsafe
@@ -4395,6 +5468,18 @@ function damagePlayer(rawAmount = 1, type = 'generic', source = null) {
     }
     spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#ec4899', 24);
     addFloatingText('🧬 EMERGENCY MATRIX SAVED YOU! (+2 HP, +2 SHIELD, EMP STASIS)', player.x + 35, player.y - 25, '#ec4899');
+    updateHud();
+    return 0;
+  }
+
+  // Chrono Paradox Engine: Full HP rewind once per run
+  if (hasArtifact('chrono_paradox_engine') && player.hp <= finalDmg && !player.paradoxEngineUsed) {
+    player.paradoxEngineUsed = true;
+    player.hp = player.maxHp;
+    player.invulnerableTimer = 180;
+    screenShake = 12;
+    if (window.audio) window.audio.powerupGet();
+    addFloatingText('⌛ PARADOX REWIND (FULL HP)!', player.x + 35, player.y - 20, '#06b6d4');
     updateHud();
     return 0;
   }
@@ -4526,6 +5611,47 @@ function handleRoomVictory() {
   if (earnedChips > 0) {
     addDataChips(earnedChips, CONFIG.width / 2, CONFIG.height / 2 + 35);
   }
+
+  // Room Clear Repair & Economy Perks
+  if (hasArtifact('emergency_repair') && (isBoss || isMiniBoss || roomType === 'SWARM')) {
+    player.hp = Math.min(player.maxHp, player.hp + 1);
+    addFloatingText('🩺 +1 HP (EMERGENCY REPAIR)', player.x + 35, player.y - 15, '#00e676');
+  }
+  if (hasArtifact('nanite_repair') && player.hp < player.maxHp) {
+    player.hp = Math.min(player.maxHp, player.hp + 1);
+    addFloatingText('🩺 +1 HP (NANITE REPAIR MATRIX)', player.x + 35, player.y - 15, '#00e676');
+  }
+
+  // Probability Collapse: 15% chance per room clear to trigger free Jackpot
+  if (hasArtifact('probability_collapse') && Math.random() < 0.15) {
+    const jackpotBonus = 50;
+    addDataChips(jackpotBonus, CONFIG.width / 2, CONFIG.height / 2);
+    runCoresEarned += 2;
+    metaSave.cores = (metaSave.cores || 0) + 2;
+    saveMetaProgress();
+    if (window.audio) window.audio.wheelWin();
+    addFloatingText('🎰 PROBABILITY COLLAPSE: JACKPOT! (+50 CHIPS, +2 CORES)', CONFIG.width / 2 - 120, CONFIG.height / 2 - 30, '#ffd700');
+  }
+
+  // Gambler Double Down Matrix: Doubles victory rewards when at 2 HP or less
+  if (hasArtifact('gambler_double_down_matrix') && player.hp <= 2) {
+    earnedCores *= 2;
+    if (earnedChips > 0) addDataChips(earnedChips, CONFIG.width / 2, CONFIG.height / 2 + 55);
+    addFloatingText('🎲 DOUBLE DOWN: 2X VICTORY REWARDS!', CONFIG.width / 2 - 100, CONFIG.height / 2 - 45, '#ffd700');
+  }
+
+  // Core Transmuter: Bonus data chips on room clear
+  if (hasArtifact('core_transmuter')) {
+    addDataChips(25, CONFIG.width / 2, CONFIG.height / 2 + 70);
+    addFloatingText('💎 CORE TRANSMUTER (+25 CHIPS)', CONFIG.width / 2 - 80, CONFIG.height / 2 - 60, '#00f2fe');
+  }
+
+  // Cleanup contraptions on room clear
+  playerBumpers = [];
+  playerGears = [];
+  playerHomingWrenches = [];
+  playerMasterpiece = null;
+  playerMiasmaClouds = [];
 
   runCoresEarned += earnedCores;
   metaSave.cores += earnedCores;
@@ -5107,6 +6233,129 @@ function draw() {
       ctx.fillRect(l.x, l.y, l.w || 14, l.h || 4);
     });
 
+    // 1. Draw Player Spring Bumpers (Inventor Path & Upgrades)
+    playerBumpers.forEach(bmp => {
+      ctx.save();
+      ctx.translate(bmp.x, bmp.y);
+      const pulseScale = 1 + Math.sin(bmp.pulse || 0) * 0.08;
+      ctx.scale(pulseScale, pulseScale);
+
+      ctx.strokeStyle = '#ffd700';
+      ctx.lineWidth = 3;
+      ctx.shadowColor = '#ffd700';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(0, 0, bmp.radius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(255, 215, 0, 0.7)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let a = 0; a < Math.PI * 4; a += 0.25) {
+        const r = (a / (Math.PI * 4)) * (bmp.radius - 4);
+        const sx = Math.cos(a + (bmp.pulse || 0)) * r;
+        const sy = Math.sin(a + (bmp.pulse || 0)) * r;
+        if (a === 0) ctx.moveTo(sx, sy);
+        else ctx.lineTo(sx, sy);
+      }
+      ctx.stroke();
+
+      ctx.fillStyle = '#111827';
+      ctx.beginPath();
+      ctx.arc(0, 0, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffd700';
+      ctx.font = '800 8px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('1.4x', 0, 0);
+
+      ctx.restore();
+    });
+
+    // 2. Draw Player Prototype Gears (Inventor Path & Upgrades)
+    playerGears.forEach(g => {
+      ctx.save();
+      ctx.translate(g.x, g.y);
+      ctx.rotate(g.angle || 0);
+      ctx.fillStyle = g.color || '#ffd700';
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.2;
+
+      const teeth = 6;
+      for (let t = 0; t < teeth; t++) {
+        ctx.rotate((Math.PI * 2) / teeth);
+        ctx.fillRect(-g.radius - 2, -2.5, 4, 5);
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, g.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+
+    // 3. Draw Player Homing Wrenches (Inventor Upgrades)
+    playerHomingWrenches.forEach(w => {
+      ctx.save();
+      ctx.translate(w.x, w.y);
+      ctx.rotate(w.angle || 0);
+      ctx.font = '16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🔧', 0, 0);
+      ctx.restore();
+    });
+
+    // 4. Draw Player Masterpiece Prototype Bot (Doomsday Contraption)
+    if (playerMasterpiece) {
+      const pm = playerMasterpiece;
+      ctx.save();
+      ctx.translate(pm.x, pm.y);
+      ctx.shadowColor = '#ffd700';
+      ctx.shadowBlur = 15;
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+      ctx.strokeStyle = '#ffd700';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(-22, -14, 44, 28, 6);
+      } else {
+        ctx.rect(-22, -14, 44, 28);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.font = '16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('💡🤖', 0, 0);
+
+      const lifeW = Math.max(0, 40 * (pm.life / 720));
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.fillRect(-20, -20, 40, 4);
+      ctx.fillStyle = '#ffd700';
+      ctx.fillRect(-20, -20, lifeW, 4);
+      ctx.restore();
+    }
+
+    // 5. Draw Player Toxic Miasma Clouds (Plague Path & Upgrades)
+    playerMiasmaClouds.forEach(mc => {
+      ctx.save();
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.18)';
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.45)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(mc.x, mc.y, mc.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    });
+
     // Draw Player Paddle with Overdrive Glow
     let paddleAlpha = 1;
     if (player.invulnerableTimer > 0) {
@@ -5117,6 +6366,15 @@ function draw() {
     const pColor = player.isOverdrive ? '#ffd700' : (voidPhaseActive > 0 ? '#d500f9' : player.color);
     drawPaddleGraphic(ctx, player.x, player.y, player.w, player.h, pColor);
     ctx.globalAlpha = 1;
+
+    // Temporal Echo top-rim mirror paddle graphic
+    if (hasArtifact('temporal_echo')) {
+      const mirrorPaddleX = 100 + (player.y / CONFIG.height) * (CONFIG.width - 200);
+      ctx.save();
+      ctx.globalAlpha = 0.65;
+      drawPaddleGraphic(ctx, mirrorPaddleX - 35, 8, 70, 14, '#c084fc');
+      ctx.restore();
+    }
 
     const hasSentry = hasArtifact('nano_sentry') || player.droneCommander || primaryPath === 'drone' || (activeBuffs.orbitalDrone && activeBuffs.orbitalDrone > 0);
     const hasSat = hasArtifact('defense_satellite');
@@ -6072,6 +7330,21 @@ function openDraftModal() {
       chosenIds.add(art.id);
       choices.push(art);
     }
+  }
+
+  // Wildcard Matrix: Guarantees at least 1 Epic or Legendary upgrade choice
+  if (hasArtifact('wildcard_matrix')) {
+    if (!choices.some(c => c.rarity === 'epic' || c.rarity === 'legendary')) {
+      const highTierPool = eligibleArtifacts.filter(a => a.rarity === 'epic' || a.rarity === 'legendary');
+      if (highTierPool.length > 0) {
+        choices[0] = highTierPool[Math.floor(Math.random() * highTierPool.length)];
+      }
+    }
+  }
+
+  // Reroll Protocol: Grants +2 free Draft Rerolls per sector
+  if (hasArtifact('reroll_protocol') && typeof player.freeDraftRerolls === 'undefined') {
+    player.freeDraftRerolls = 2;
   }
 
   let hasLegendary = choices.some(c => c.rarity === 'legendary');
@@ -8655,6 +9928,11 @@ function startBennieBossBattle(pathId, upgradeIds) {
   shockwaves = [];
   lightningArcs = [];
   balls = [];
+  playerBumpers = [];
+  playerGears = [];
+  playerHomingWrenches = [];
+  playerMasterpiece = null;
+  playerMiasmaClouds = [];
 
   // Initialize Boss with mechanical inventor systems
   bennieBoss = {
